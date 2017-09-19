@@ -1,1 +1,3 @@
-# CIS680_Fall2017
+# CIS 680: Vision & Learning
+
+* demo/: Contains code in lecture 05: Practical Guide
