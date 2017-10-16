@@ -68,19 +68,29 @@ class Trainer(object):
     self.sess = sv.prepare_or_wait_for_session(config=sess_config)
 
   def train(self):
+    training_error_set = np.zeros([self.max_step - self.start_step,3], dtype=np.float32)
     for step in trange(self.start_step, self.max_step):
       fetch_dict = {
         'c_optim': self.c_optim,
         'wd_optim': self.wd_optim,
         'c_loss': self.c_loss,
-        'accuracy': self.accuracy }
+        'accuracy': self.accuracy,
+        'lr': self.lr }
 
       if step % self.log_step == self.log_step - 1:
         fetch_dict.update({
+          'c_optim': self.c_optim,
+          'wd_optim': self.wd_optim,
+          'c_loss': self.c_loss,
+          'accuracy': self.accuracy, 
           'lr': self.lr,
           'summary': self.summary_op })
 
       result = self.sess.run(fetch_dict)
+      lr = result['lr']
+      c_loss = result['c_loss']
+      accuracy = result['accuracy']
+      training_error_set[step] = [lr, c_loss, accuracy]
 
       if step % self.log_step == self.log_step - 1:
         self.summary_writer.add_summary(result['summary'], step)
@@ -111,6 +121,8 @@ class Trainer(object):
 
       if step % self.epoch_step == self.epoch_step - 1:
         self.sess.run([self.lr_update])
+
+    return training_error_set 
 
   def build_model(self):
     self.x = self.data_loader

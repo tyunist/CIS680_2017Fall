@@ -2,11 +2,18 @@ import os
 import numpy as np
 import tensorflow as tf
 import dataset_utils
-def download_data(data_path):
+def download_data(data_path, unpack=False):
   url = "http://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz"
   if not tf.gfile.Exists(data_path):
     tf.gfile.MakeDirs(data_path)
     dataset_utils.download_and_uncompress_tarball(url, data_path) 
+  if tf.gfile.Exists(os.path.join(data_path , "imgs")) & unpack==False:
+    if len(os.listdir(os.path.join(data_path , "imgs"))) > 100:
+      print('>>Data are already unpackaged to', os.path.join(data_path ,"imgs"))
+      return 
+  print('...Unpacking data from ', data_path)
+  dataset_utils.unpack_cifar10(data_path , PIXELS_DIR = "imgs")
+  print('>>Complete unpackaging to', os.path.join(data_path , "imgs"))
 
 def read_labeled_image_list(img_list_path, img_dir):
   """Reads a .txt file containing pathes and labeles
@@ -49,7 +56,7 @@ def get_loader(root, batch_size, split=None, shuffle=True):
     img_batch: A (float) tensor containing a batch of images.
     lab_batch: A (int) tensor containing a batch of labels.
   """
-  img_paths_np, labs_np = read_labeled_image_list(root+'/devkit/'+split+'.txt', root+'/imgs/')
+  img_paths_np, labs_np = read_labeled_image_list(root+ '/' + split+'.txt', root+'/imgs/')
 
   with tf.device('/cpu:0'):
     img_paths = tf.convert_to_tensor(img_paths_np, dtype=tf.string)

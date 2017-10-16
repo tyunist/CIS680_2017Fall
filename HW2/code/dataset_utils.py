@@ -23,10 +23,89 @@ import tarfile
 
 from six.moves import urllib
 import tensorflow as tf
+import glob
+import numpy as np
+from skimage.io import imsave
+import cPickle as pkl
+import pdb 
+def unpack_cifar10(raw_path, PIXELS_DIR = "imgs"):
+    """
+        Entry point.
+    """
+    train_label_file = "train.txt"
+    test_label_file = "test.txt"
+    
+    PIXELS_DIR = os.path.join(raw_path, PIXELS_DIR)
+    train_label_file = os.path.join(raw_path, train_label_file)
+    test_label_file = os.path.join(raw_path, test_label_file)
+
+    if not os.path.exists(PIXELS_DIR):
+      os.makedirs(PIXELS_DIR) 
+  
+    def unpack_file(fname):
+      """
+          Unpacks a CIFAR-10 file.
+      """
+      with open(fname, "r") as f:
+          result = pkl.load(f)
+      return result
+    def save_as_image(img_flat, fname):
+      """
+          Saves a data blob as an image file.
+      """
+
+      # consecutive 1024 entries store color channels of 32x32 image 
+      img_R = img_flat[0:1024].reshape((32, 32))
+      img_G = img_flat[1024:2048].reshape((32, 32))
+      img_B = img_flat[2048:3072].reshape((32, 32))
+      img = np.dstack((img_R, img_G, img_B))
+      print('save ', os.path.join(PIXELS_DIR, fname))
+      imsave(os.path.join(PIXELS_DIR, fname), img)
+
+    train_labels = {}
+    test_labels = {}
+
+    # use "data_batch_*" for just the training set
+    for fname in glob.glob(os.path.join(raw_path,'cifar-10-batches-py') +"/data_batch*"):
+        data = unpack_file(fname)
+
+        for i in range(10000):
+            img_flat = data["data"][i]
+            fname = data["filenames"][i]
+            label = data["labels"][i]
+
+            # save the image and store the label
+            save_as_image(img_flat, fname)
+            train_labels[fname] = label
+
+    # write out labels file
+    with open(train_label_file, "w") as f:
+        for (fname, label) in train_labels.iteritems():
+            f.write("{0} {1}\n".format(fname, label))
+
+    # use "test_batch*" for just the test set
+    for fname in glob.glob(os.path.join(raw_path,'cifar-10-batches-py') +"/test_batch*"):
+        data = unpack_file(fname)
+
+        for i in range(10000):
+            img_flat = data["data"][i]
+            fname = data["filenames"][i]
+            label = data["labels"][i]
+
+            # save the image and store the label
+            save_as_image(img_flat, fname)
+            test_labels[fname] = label
+
+    # write out labels file
+    with open(test_label_file, "w") as f:
+        for (fname, label) in test_labels.iteritems():
+            f.write("{0} {1}\n".format(fname, label))
+
+
+######################################################
+# Unused functions 
 
 LABELS_FILENAME = 'labels.txt'
-
-
 def int64_feature(values):
   """Returns a TF-Feature of int64s.
 
