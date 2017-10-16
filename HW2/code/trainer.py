@@ -1,4 +1,4 @@
-from __future__ import print_function                                                                 
+# from __future__ import print_function                                                                 
 
 import sys
 import os
@@ -13,8 +13,12 @@ def norm_img(img):
 def denorm_img(img):
   return (img + 1.) * 127.5
 
+# def flip_flip(img):
+
+
 class Trainer(object):
   def __init__(self, config, data_loader, label_loader, test_data_loader, test_label_loader):
+
     self.config = config
     self.data_loader = data_loader
     self.label_loader = label_loader
@@ -34,6 +38,10 @@ class Trainer(object):
     self.test_iter = config.test_iter
     self.wd_ratio = config.wd_ratio
 
+    self.cnn_model_set = {'quick_cnn':quick_cnn, 'customized_cnn':customized_cnn}
+    self.cnn_model_name= config.cnn_model
+    print('...Model:', self.cnn_model_name) 
+
     self.lr = tf.Variable(config.lr, name='lr')
 
     # Exponential learning rate decay
@@ -45,10 +53,10 @@ class Trainer(object):
 
     self.model_dir = config.model_dir
     self.load_path = config.load_path
-
+    print('...Building model')
     self.build_model()
     self.build_test_model()
-
+    print('...Create saver')
     self.saver = tf.train.Saver()
 
     self.summary_writer = tf.summary.FileWriter(self.model_dir)
@@ -68,6 +76,7 @@ class Trainer(object):
     self.sess = sv.prepare_or_wait_for_session(config=sess_config)
 
   def train(self):
+    print('...Model_dir:', self.model_dir)
     training_error_set = np.zeros([self.max_step - self.start_step,3], dtype=np.float32)
     for step in trange(self.start_step, self.max_step):
       fetch_dict = {
@@ -105,8 +114,8 @@ class Trainer(object):
         sys.stdout.flush()
 
       if step % self.save_step == self.save_step - 1:
-        self.saver.save(self.sess, self.model_dir + '/model')
-
+        self.saver.save(self.sess, self.model_dir + '/model',global_step=step)
+        
         test_accuracy = 0
         for iter in xrange(self.test_iter):
           fetch_dict = { "test_accuracy":self.test_accuracy }
@@ -121,15 +130,21 @@ class Trainer(object):
 
       if step % self.epoch_step == self.epoch_step - 1:
         self.sess.run([self.lr_update])
-
+    self.saver.save(self.sess, self.model_dir + '/model', global_step=step)
     return training_error_set 
 
   def build_model(self):
     self.x = self.data_loader
     self.labels = self.label_loader
-    x = norm_img(self.x)
+    # if self.is_normalize:
+    #   print '....Mode: normalize'
+    #   x = norm_img(self.x)
+    # else:
+    x = self.x 
+      # print '....Mode: Do not normalize'
 
-    self.c_loss, feat, self.accuracy, self.c_var = quick_cnn(
+
+    self.c_loss, feat, self.accuracy, self.c_var = self.cnn_model_set[self.cnn_model_name](
       x, self.labels, self.c_num, self.batch_size, is_train=True, reuse=False)
     self.c_loss = tf.reduce_mean(self.c_loss, 0)
 
@@ -177,7 +192,7 @@ class Trainer(object):
     ])
 
   def test(self):
-    self.saver.restore(self.sess, self.model_dir)
+    self.saver.restore(self.sess, tf.train.latest_checkpoint(self.model_dir)) 
     test_accuracy = 0
     for iter in trange(self.test_iter):
       fetch_dict = {"test_accuracy":self.test_accuracy}
@@ -190,7 +205,10 @@ class Trainer(object):
   def build_test_model(self):
     self.test_x = self.test_data_loader
     self.test_labels = self.test_label_loader
-    test_x = norm_img(self.test_x)
+    # if self.is_normalize:
+    #   test_x = norm_img(self.test_x)
+    # else:
+    test_x = self.test_x 
 
-    loss, self.test_feat, self.test_accuracy, var = quick_cnn(
+    loss, self.test_feat, self.test_accuracy, var = self.cnn_model_set[self.cnn_model_name](
       test_x, self.test_labels, self.c_num, self.batch_size_test, is_train=False, reuse=True)

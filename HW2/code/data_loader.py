@@ -6,8 +6,10 @@ def download_data(data_path, unpack=False):
   url = "http://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz"
   if not tf.gfile.Exists(data_path):
     tf.gfile.MakeDirs(data_path)
-    dataset_utils.download_and_uncompress_tarball(url, data_path) 
-  if tf.gfile.Exists(os.path.join(data_path , "imgs")) & unpack==False:
+    dataset_utils.download_and_uncompress_tarball(url, data_path)
+  print os.path.join(data_path , "imgs") 
+  print tf.gfile.Exists(os.path.join(data_path , "imgs"))
+  if tf.gfile.Exists(os.path.join(data_path , "imgs")) and unpack==False:
     if len(os.listdir(os.path.join(data_path , "imgs"))) > 100:
       print('>>Data are already unpackaged to', os.path.join(data_path ,"imgs"))
       return 
@@ -45,7 +47,7 @@ def read_images_from_disk(input_queue):
   img = tf.image.decode_png(img_path, channels=3)
   return img, lab
 
-def get_loader(root, batch_size, split=None, shuffle=True):
+def get_loader(root, batch_size, mode_list=[None], split=None, shuffle=True):
   """ Get a data loader for tensorflow computation graph
   Args:
     root: Path/to/dataset/root/, a string
@@ -69,6 +71,29 @@ def get_loader(root, batch_size, split=None, shuffle=True):
 
     img.set_shape([32, 32, 3])
     img = tf.cast(img, tf.float32)
+
+    # Preprocessing images 
+    if not mode_list[0]:
+      print '...Mode: not preprocessing'
+   
+    else: 
+      # Augmenting in order 
+      if 'flip_horizontal' in mode_list and split=='train': # only flip when training 
+        img = tf.image.random_flip_up_down(img)
+        print '...Mode: flip_horizontal'
+      if 'normalize' in mode_list:
+        print '...Mode: normalize'
+        img = tf.image.per_image_standardization(img)
+
+      if 'pad_crop' in mode_list and split=='train':
+        print '...Mode: zero pad and cropping'
+
+        # padding 
+        paddings = tf.constant([[1, 4], [2, 4], [3, 0]]) # pad 4 elements to each dimension 
+        padded_img  = tf.pad(img, paddings, 'CONSTANT')
+
+        # Randomly crop 
+        img = tf.random_crop(padded_img, tf.constant([32,32,3]))
 
     img_batch, lab_batch = tf.train.batch([img, lab], num_threads=1,
                            batch_size=batch_size, capacity=10*batch_size)

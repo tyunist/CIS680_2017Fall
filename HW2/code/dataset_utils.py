@@ -66,7 +66,7 @@ def unpack_cifar10(raw_path, PIXELS_DIR = "imgs"):
     test_labels = {}
 
     # use "data_batch_*" for just the training set
-    for fname in glob.glob(os.path.join(raw_path,'cifar-10-batches-py') +"/data_batch*"):
+    for fname in glob.glob(os.path.join(raw_path,'cifar-10-batches-py') +"/data_batch_1"):
         data = unpack_file(fname)
 
         for i in range(10000):

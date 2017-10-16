@@ -18,34 +18,35 @@ def main(config):
   print('\n.....Obtain train & test batches')
  
   train_data_loader, train_label_loader = get_loader(
-    config.data_path, config.batch_size, 'train', True)
+    config.data_path, config.batch_size, config.preprocessing_list, 'train', True)
 
   if config.is_train:
     test_data_loader, test_label_loader = get_loader(
-      config.data_path, config.batch_size_test, 'test', False)
+      config.data_path, config.batch_size_test, config.preprocessing_list, 'test', False)
   else:
     test_data_loader, test_label_loader = get_loader(
-      config.data_path, config.batch_size_test, config.split, False)
+      config.data_path, config.batch_size_test, config.preprocessing_list, config.split, False)
   print('\n.....Start training')
   trainer = Trainer(config, train_data_loader, train_label_loader, test_data_loader, test_label_loader)
   if config.is_train:
     print('\n.....Training mode')
     save_config(config)
     train_error_set = trainer.train()
+      # Draw training error 
+    np.savetxt(os.path.join(config.log_dir,'train_accuracy.txt'), train_error_set)
+    fig = plt.figure()
+    plt.plot(train_error_set[:,2])
+    plt.title('Training Acurracy over Iterations')
+    plt.xlabel('Iterations')
+    plt.ylabel('Accuracy')
+    fig.savefig(os.path.join(config.log_dir,'training_accuracy.png'))
   else:
     print('\n.....Test mode')
     if not config.load_path:
       raise Exception("[!] You should specify `load_path` to load a pretrained model")
     trainer.test()
 
-  # Draw training error 
-  np.savetxt(os.path.join(config.log_dir,'train_accuracy.txt'), train_error_set)
-  fig = plt.figure()
-  plt.plot(train_error_set[:,2])
-  plt.title('Training Acurracy over Iterations')
-  plt.xlabel('Iterations')
-  plt.ylabel('Accuracy')
-  fig.savefig(os.path.join(config.log_dir,'training_accuracy.png'))
+
 
   print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>')
 
