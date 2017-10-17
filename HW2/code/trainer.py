@@ -44,6 +44,9 @@ class Trainer(object):
 
     self.lr = tf.Variable(config.lr, name='lr')
 
+    # Question 2.3: generate gradient vanishing 
+    self.make_grad_vanish = config.make_grad_vanish
+
     # Exponential learning rate decay
     self.epoch_num = config.max_step / config.epoch_step
     decay_factor = (config.min_lr / config.lr)**(1./(self.epoch_num-1.))
@@ -77,14 +80,16 @@ class Trainer(object):
 
   def train(self):
     print('...Model_dir:', self.model_dir)
-    training_error_set = np.zeros([self.max_step - self.start_step,3], dtype=np.float32)
+    training_log_set = np.zeros([self.max_step - self.start_step,6], dtype=np.float32)
     for step in trange(self.start_step, self.max_step):
       fetch_dict = {
         'c_optim': self.c_optim,
         'wd_optim': self.wd_optim,
         'c_loss': self.c_loss,
         'accuracy': self.accuracy,
-        'lr': self.lr }
+        'lr': self.lr,
+        'conv1_grad': self.conv1_grad,
+        'conv4_grad': self.conv4_grad }
 
       if step % self.log_step == self.log_step - 1:
         fetch_dict.update({
@@ -93,13 +98,17 @@ class Trainer(object):
           'c_loss': self.c_loss,
           'accuracy': self.accuracy, 
           'lr': self.lr,
+          'conv1_grad': self.conv1_grad,
+          'conv4_grad': self.conv4_grad, 
           'summary': self.summary_op })
 
       result = self.sess.run(fetch_dict)
       lr = result['lr']
       c_loss = result['c_loss']
       accuracy = result['accuracy']
-      training_error_set[step] = [lr, c_loss, accuracy]
+      conv1_grad = result['conv1_grad']
+      conv4_grad = result['conv4_grad']
+      training_log_set[step] = [lr, c_loss, accuracy, conv1_grad, conv4_grad, 0]
 
       if step % self.log_step == self.log_step - 1:
         self.summary_writer.add_summary(result['summary'], step)
@@ -131,7 +140,7 @@ class Trainer(object):
       if step % self.epoch_step == self.epoch_step - 1:
         self.sess.run([self.lr_update])
     self.saver.save(self.sess, self.model_dir + '/model', global_step=step)
-    return training_error_set 
+    return training_log_set 
 
   def build_model(self):
     self.x = self.data_loader
@@ -145,22 +154,24 @@ class Trainer(object):
 
 
     self.c_loss, feat, self.accuracy, self.c_var = self.cnn_model_set[self.cnn_model_name](
-      x, self.labels, self.c_num, self.batch_size, is_train=True, reuse=False)
+      x, self.labels, self.c_num, self.batch_size, is_train=True, reuse=False,\
+      make_grad_vanish=self.make_grad_vanish)
     self.c_loss = tf.reduce_mean(self.c_loss, 0)
 
-    # Gather gradients of conv1 & fc4 weights for logging
+    # Gather gradients of conv1 & conv4 weights for logging
     with tf.variable_scope("C/conv1", reuse=True):
       conv1_weights = tf.get_variable("weights")
-    conv1_grad = tf.reduce_max(tf.abs(tf.gradients(self.c_loss, conv1_weights, self.c_loss)))
+    self.conv1_grad = tf.reduce_max(tf.abs(tf.gradients(self.c_loss, conv1_weights)))#, self.c_loss)))
 
-    with tf.variable_scope("C/fc4", reuse=True):
-      fc4_weights = tf.get_variable("weights")
-    fc4_grad = tf.reduce_max(tf.abs(tf.gradients(self.c_loss, fc4_weights, self.c_loss)))
+    with tf.variable_scope("C/conv4", reuse=True):
+      conv4_weights = tf.get_variable("weights")
+    self.conv4_grad = tf.reduce_max(tf.abs(tf.gradients(self.c_loss, conv4_weights)))#, self.c_loss)))
 
-    x_grad = tf.gradients(self.c_loss, x, self.c_loss)
+    # Gradient w.r.t x 
+    x_grad = tf.gradients(self.c_loss, x) #, self.c_loss)
     x_grad = tf.reduce_sum(tf.abs(x_grad[0]), 3, True)
     x_grad = (x_grad - tf.reduce_min(x_grad)) / (tf.reduce_max(x_grad) - tf.reduce_mean(x_grad))
-    x_grad = tf.multiply(self.x , x_grad)
+    self.x_grad = tf.multiply(self.x , x_grad)
 
     wd_optimizer = tf.train.GradientDescentOptimizer(self.lr)
     if self.optimizer == 'sgd':
@@ -182,11 +193,11 @@ class Trainer(object):
       tf.summary.scalar("c_loss", self.c_loss),
       tf.summary.scalar("accuracy", self.accuracy),
       tf.summary.scalar("lr", self.lr),
-      tf.summary.scalar("conv1_grad", conv1_grad),
-      tf.summary.scalar("fc4_grad", fc4_grad),
+      tf.summary.scalar("conv1_grad", self.conv1_grad),
+      tf.summary.scalar("conv4_grad", self.conv4_grad),
 
       tf.summary.image("inputs", self.x),
-      tf.summary.image("x_grad", x_grad),
+      tf.summary.image("x_grad", self.x_grad),
 
       tf.summary.histogram("feature", feat)
     ])
@@ -211,4 +222,5 @@ class Trainer(object):
     test_x = self.test_x 
 
     loss, self.test_feat, self.test_accuracy, var = self.cnn_model_set[self.cnn_model_name](
-      test_x, self.test_labels, self.c_num, self.batch_size_test, is_train=False, reuse=True)
+      test_x, self.test_labels, self.c_num, self.batch_size_test, is_train=False, reuse=True, \
+      make_grad_vanish=self.make_grad_vanish)

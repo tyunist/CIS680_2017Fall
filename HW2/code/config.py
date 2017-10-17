@@ -20,8 +20,8 @@ net_arg.add_argument('--c_num', type=int, default=10)  # Number of classes
 data_arg = add_argument_group('Data')
 data_arg.add_argument('--dataset', type=str, default='cifar10', choices=['cifar10', 'cifar100'])
 data_arg.add_argument('--split', type=str, default='train')
-data_arg.add_argument('--batch_size', type=int, default=100)
-data_arg.add_argument('--batch_size_test', type=int, default=100)
+data_arg.add_argument('--batch_size', type=int, default=10)
+data_arg.add_argument('--batch_size_test', type=int, default=10)
 
 # Training / test parameters
 train_arg = add_argument_group('Training')
@@ -36,13 +36,13 @@ train_arg.add_argument('--use_gpu', type=str2bool, default=True)
 
 # Misc
 misc_arg = add_argument_group('Misc')
-misc_arg.add_argument('--load_path', type=str, default='/home/tynguyen/cis680/logs/HW2/None')
+misc_arg.add_argument('--load_path', type=str, default='/media/sf_cogntivive_school/cis680/logs/HW2/vanish')
 misc_arg.add_argument('--log_step', type=int, default=100)
 misc_arg.add_argument('--test_iter', type=int, default=100)
 misc_arg.add_argument('--save_step', type=int, default=100)
 misc_arg.add_argument('--log_level', type=str, default='INFO', choices=['INFO', 'DEBUG', 'WARN'])
-misc_arg.add_argument('--log_dir', type=str, default='/home/tynguyen/cis680/logs/HW2/None')
-misc_arg.add_argument('--data_dir', type=str, default='/home/tynguyen/cis680/data/')
+misc_arg.add_argument('--log_dir', type=str, default='/media/sf_cogntivive_school/cis680/logs/HW2/vanish')
+misc_arg.add_argument('--data_dir', type=str, default='/media/sf_cogntivive_school/cis680/data/')
 misc_arg.add_argument('--random_seed', type=int, default=0)
 
 # Question 1.1, 1.2: choose normalizing or not 
@@ -51,6 +51,10 @@ misc_arg.add_argument('--preprocessing_list', nargs='+',default=[None])#['flip_h
 # Question 2.1 
 # misc_arg.add_argument('--cnn_model', type=str, default='quick_cnn')
 misc_arg.add_argument('--cnn_model', type=str, default='customized_cnn')
+# Question 2.2 
+misc_arg.add_argument('--get_cnn_grad', type=str2bool, default=True)
+# Question 2.3 
+misc_arg.add_argument('--make_grad_vanish', type=str2bool, default=False) # Default should be False 
 def get_config():
   config, unparsed = parser.parse_known_args()
   return config, unparsed    

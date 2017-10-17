@@ -40,6 +40,23 @@ def main(config):
     plt.xlabel('Iterations')
     plt.ylabel('Accuracy')
     fig.savefig(os.path.join(config.log_dir,'training_accuracy.png'))
+
+    if config.get_cnn_grad:
+      print('...Get CNN gradients')
+      fig = plt.figure()
+      plt.plot(train_error_set[:,3])
+      plt.title('Gradient in The First CNN Layer over Iterations')
+      plt.xlabel('Iterations')
+      plt.ylabel('Gradient')
+      fig.savefig(os.path.join(config.log_dir,'conv1_grad.png'))
+
+      fig = plt.figure()
+      plt.plot(train_error_set[:,4])
+      plt.title('Gradient in The Last CNN Layer over Iterations')
+      plt.xlabel('Iterations')
+      plt.ylabel('Gradient')
+      fig.savefig(os.path.join(config.log_dir,'conv4_grad.png'))
+
   else:
     print('\n.....Test mode')
     if not config.load_path:

@@ -1,7 +1,7 @@
 import tensorflow as tf
 from layers import *
 
-def quick_cnn(x, labels, c_num, batch_size, is_train, reuse):
+def quick_cnn(x, labels, c_num, batch_size, is_train, reuse, make_grad_vanish=False):
   with tf.variable_scope('C', reuse=reuse) as vs:
 
     # conv1
@@ -51,34 +51,37 @@ def quick_cnn(x, labels, c_num, batch_size, is_train, reuse):
   return loss, feat, accuracy, variables
 
 
-def customized_cnn(x, labels, c_num, batch_size, is_train, reuse):
+def customized_cnn(x, labels, c_num, batch_size, is_train, reuse, make_grad_vanish=False):
+  use_bn = not make_grad_vanish 
   with tf.variable_scope('C', reuse=reuse) as vs:
 
     # conv1
     with tf.variable_scope('conv1', reuse=reuse):
       hidden_num = 32 
-      x = conv_factory(x, hidden_num, 3, 1, is_train, reuse)
+      x = conv_factory(x, hidden_num, 3, 1, is_train, reuse, use_bn=use_bn)
       # x = tf.nn.avg_pool(x, ksize=[1,2,2,1], strides=[1,2,2,1], padding='VALID')
+    # Uncomment to see vinishing gradients
+    if make_grad_vanish:
+      for l in range(20):
+       with tf.variable_scope('rd_conv_'+str(l), reuse=reuse):
+         x = conv_factory(x, hidden_num, 5, 1, is_train, reuse, use_bn=use_bn)
 
     # conv2
     with tf.variable_scope('conv2', reuse=reuse):
-      x = conv_factory(x, hidden_num, 3, 1, is_train, reuse)
+      x = conv_factory(x, hidden_num, 3, 1, is_train, reuse, use_bn=use_bn)
       x = tf.nn.max_pool(x, ksize=[1,2,2,1], strides=[1,2,2,1], padding='VALID')
 
-    # Uncomment to see vinishing gradients
-#    for l in range(8):
-#      with tf.variable_scope('rd_conv_'+str(l), reuse=reuse):
-#        x = conv_factory(x, hidden_num, 5, 1, is_train, reuse)
+
 
     # conv3
     with tf.variable_scope('conv3', reuse=reuse):
       hidden_num = 2 * hidden_num
-      x = conv_factory(x, hidden_num, 3, 1, is_train, reuse)
+      x = conv_factory(x, hidden_num, 3, 1, is_train, reuse, use_bn=use_bn)
       # x = tf.nn.avg_pool(x, ksize=[1,2,2,1], strides=[1,2,2,1], padding='VALID')
 
     # conv4
     with tf.variable_scope('conv4', reuse=reuse):
-      x = conv_factory(x, hidden_num, 3, 1, is_train, reuse)
+      x = conv_factory(x, hidden_num, 3, 1, is_train, reuse, use_bn=use_bn)
       x = tf.nn.max_pool(x, ksize=[1,2,2,1], strides=[1,2,2,1], padding='VALID')
 
     # # fc4

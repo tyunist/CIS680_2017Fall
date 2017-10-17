@@ -1,7 +1,7 @@
 import tensorflow as tf
 slim = tf.contrib.slim
 
-def conv_factory(x, hidden_num, kernel_size, stride, is_train, reuse):
+def conv_factory(x, hidden_num, kernel_size, stride, is_train, reuse, use_bn=True):
   vs = tf.get_variable_scope()
   in_channels = x.get_shape()[3]
   W = tf.get_variable('weights', [kernel_size,kernel_size,in_channels,hidden_num],
@@ -10,13 +10,14 @@ def conv_factory(x, hidden_num, kernel_size, stride, is_train, reuse):
         initializer = tf.constant_initializer(0.0))
 
   x = tf.nn.conv2d(x, W, strides=[1,stride,stride,1], padding='SAME')
-  x = slim.batch_norm(x, is_training=is_train, reuse=reuse, scale=True,
+  if use_bn:
+    x = slim.batch_norm(x, is_training=is_train, reuse=reuse, scale=True,
         fused=True, scope=vs, updates_collections=None)
   x = tf.nn.relu(x)
 #  x = tf.nn.sigmoid(x)
   return x
 
-def fc_factory(x, hidden_num, is_train, reuse):
+def fc_factory(x, hidden_num, is_train, reuse, use_bn=True):
 
   vs = tf.get_variable_scope()
   in_channels = x.get_shape()[1]
@@ -26,7 +27,8 @@ def fc_factory(x, hidden_num, is_train, reuse):
         initializer = tf.constant_initializer(0.0))
 
   x = tf.matmul(x, W)
-  x = slim.batch_norm(x, is_training=is_train, reuse=reuse, scale=True,
+  if use_bn:
+    x = slim.batch_norm(x, is_training=is_train, reuse=reuse, scale=True,
         fused=True, scope=vs, updates_collections=None)
   x = tf.nn.relu(x)
 #  x = tf.nn.sigmoid(x)
