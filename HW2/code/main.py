@@ -24,6 +24,14 @@ def main(config):
     test_data_loader, test_label_loader = get_loader(
       config.data_path, config.batch_size_test, config.preprocessing_list, 'test', False)
   else:
+    print('...Testing mode. Currently, data used to test is', config.split)
+    print('...Testing mode. What data you want to test on? ')
+    command = raw_input('press y or yes to do test with test data. Else, evaluate on train data:')
+    if command == 'y' or command == 'yes' or command == 'Y':
+      config.split = 'test'
+    else: 
+      config.split = 'train'
+      print('...Testing ')
     test_data_loader, test_label_loader = get_loader(
       config.data_path, config.batch_size_test, config.preprocessing_list, config.split, False)
   print('\n.....Start training')
