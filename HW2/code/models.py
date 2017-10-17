@@ -52,7 +52,8 @@ def quick_cnn(x, labels, c_num, batch_size, is_train, reuse, make_grad_vanish=Fa
 
 
 def customized_cnn(x, labels, c_num, batch_size, is_train, reuse, make_grad_vanish=False):
-  use_bn = not make_grad_vanish 
+  use_bn = not make_grad_vanish
+  print('...Use Batchnome:', use_bn)  
   with tf.variable_scope('C', reuse=reuse) as vs:
 
     # conv1

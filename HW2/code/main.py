@@ -16,7 +16,7 @@ def main(config):
   download_data(config.data_path)
   print('>>Complete downloading data')
   print('\n.....Obtain train & test batches')
- 
+  print('\n.....Model_dir:', config.model_dir) 
   train_data_loader, train_label_loader = get_loader(
     config.data_path, config.batch_size, config.preprocessing_list, 'train', True)
 

@@ -61,7 +61,7 @@ class Trainer(object):
     self.build_test_model()
     print('...Create saver')
     self.saver = tf.train.Saver()
-
+    print('...Model dir:', self.model_dir) 
     self.summary_writer = tf.summary.FileWriter(self.model_dir)
     sv = tf.train.Supervisor(logdir=self.model_dir,
                              is_chief=True,
@@ -79,7 +79,6 @@ class Trainer(object):
     self.sess = sv.prepare_or_wait_for_session(config=sess_config)
 
   def train(self):
-    print('...Model_dir:', self.model_dir)
     training_log_set = np.zeros([self.max_step - self.start_step,6], dtype=np.float32)
     for step in trange(self.start_step, self.max_step):
       fetch_dict = {
@@ -203,6 +202,8 @@ class Trainer(object):
     ])
 
   def test(self):
+    print('>>>  model_dir:', self.model_dir) 
+    
     self.saver.restore(self.sess, tf.train.latest_checkpoint(self.model_dir)) 
     test_accuracy = 0
     for iter in trange(self.test_iter):

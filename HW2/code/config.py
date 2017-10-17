@@ -20,8 +20,8 @@ net_arg.add_argument('--c_num', type=int, default=10)  # Number of classes
 data_arg = add_argument_group('Data')
 data_arg.add_argument('--dataset', type=str, default='cifar10', choices=['cifar10', 'cifar100'])
 data_arg.add_argument('--split', type=str, default='train')
-data_arg.add_argument('--batch_size', type=int, default=10)
-data_arg.add_argument('--batch_size_test', type=int, default=10)
+data_arg.add_argument('--batch_size', type=int, default=100)
+data_arg.add_argument('--batch_size_test', type=int, default=100)
 
 # Training / test parameters
 train_arg = add_argument_group('Training')
@@ -35,14 +35,18 @@ train_arg.add_argument('--wd_ratio', type=float, default=5e-2)
 train_arg.add_argument('--use_gpu', type=str2bool, default=True)
 
 # Misc
+main_path = '/home/tynguyen/'
+#main_path = '/media/sf_cogntivive_school/' 
 misc_arg = add_argument_group('Misc')
-misc_arg.add_argument('--load_path', type=str, default='/media/sf_cogntivive_school/cis680/logs/HW2/vanish')
 misc_arg.add_argument('--log_step', type=int, default=100)
 misc_arg.add_argument('--test_iter', type=int, default=100)
 misc_arg.add_argument('--save_step', type=int, default=100)
 misc_arg.add_argument('--log_level', type=str, default='INFO', choices=['INFO', 'DEBUG', 'WARN'])
-misc_arg.add_argument('--log_dir', type=str, default='/media/sf_cogntivive_school/cis680/logs/HW2/vanish')
-misc_arg.add_argument('--data_dir', type=str, default='/media/sf_cogntivive_school/cis680/data/')
+
+log_sub_path = 'customized_cnn_vanish' 
+misc_arg.add_argument('--load_path', type=str, default= main_path + 'cis680/logs/HW2/' + log_sub_path)
+misc_arg.add_argument('--log_dir', type=str, default= main_path + 'cis680/logs/HW2/' + log_sub_path)
+misc_arg.add_argument('--data_dir', type=str, default= main_path + 'cis680/data/')
 misc_arg.add_argument('--random_seed', type=int, default=0)
 
 # Question 1.1, 1.2: choose normalizing or not 
