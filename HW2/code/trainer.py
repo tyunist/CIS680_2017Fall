@@ -83,6 +83,7 @@ class Trainer(object):
 
   def train(self):
     training_log_set = np.zeros([self.max_step - self.start_step,6], dtype=np.float32)
+    save_test_accuracy = 0 
     for step in trange(self.start_step, self.max_step):
       fetch_dict = {
         'c_optim': self.c_optim,
@@ -110,7 +111,7 @@ class Trainer(object):
       accuracy = result['accuracy']
       conv1_grad = result['conv1_grad']
       conv4_grad = result['conv4_grad']
-      training_log_set[step] = [lr, c_loss, accuracy, conv1_grad, conv4_grad, 0]
+      training_log_set[step] = [lr, c_loss, accuracy, conv1_grad, conv4_grad, save_test_accuracy]
 
       if step % self.log_step == self.log_step - 1:
         self.summary_writer.add_summary(result['summary'], step)
@@ -133,6 +134,7 @@ class Trainer(object):
           result = self.sess.run(fetch_dict)
           test_accuracy += result['test_accuracy']
         test_accuracy /= self.test_iter
+        save_test_accuracy = test_accuracy 
 
         print("\n[{}/{}:{:.6f}] Test Accuracy: {:.4f}" . \
               format(step, self.max_step, lr, test_accuracy))
@@ -142,7 +144,7 @@ class Trainer(object):
       if step % self.epoch_step == self.epoch_step - 1:
         self.sess.run([self.lr_update])
     self.saver.save(self.sess, self.model_dir + '/model', global_step=step)
-    return training_log_set 
+    return training_log_set
 
   def build_model(self):
     self.x = self.data_loader

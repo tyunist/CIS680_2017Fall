@@ -69,11 +69,11 @@ def customized_cnn(x, labels, c_num, batch_size, is_train, reuse, make_grad_vani
     if make_grad_vanish :
       for l in range(20):
         with tf.variable_scope('rd_conv_'+str(l), reuse=reuse):
-          x = conv_factory(res_conv, hidden_num, 5, 1, is_train, reuse, use_bn=use_bn)         
-          if resolve_grad_vanish:
-            res_conv = (x + res_conv)/2
-          else:
-            res_conv = x              
+          x = conv_factory(res_conv, hidden_num, 5, 1, is_train, reuse, use_bn=use_bn)        
+        if resolve_grad_vanish:
+          res_conv = (x + res_conv)/2
+        else:
+          res_conv = x              
     # # dropout
     # if is_train and resolve_grad_vanish:
     #   res_conv = tf.nn.dropout(res_conv, keep_prob=0.5)
@@ -82,6 +82,8 @@ def customized_cnn(x, labels, c_num, batch_size, is_train, reuse, make_grad_vani
     # Create a residual connection between conv1 and conv2 
     if make_grad_vanish and resolve_grad_vanish:
       x = (res_conv + conv1)/2
+
+   
 
     # # dropout
     # if is_train:

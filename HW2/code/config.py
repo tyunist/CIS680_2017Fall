@@ -45,7 +45,7 @@ misc_arg.add_argument('--save_step', type=int, default=100)
 misc_arg.add_argument('--log_level', type=str, default='INFO', choices=['INFO', 'DEBUG', 'WARN'])
 
 # log_sub_path = 'customized_cnn' 
-log_sub_path = 'customized_cnn_resolve_grad_vanish' 
+log_sub_path = 'customized_cnn_resolve_grad_vanish_block2' 
 misc_arg.add_argument('--load_path', type=str, default= main_path + 'cis680/logs/HW2/' + log_sub_path)
 misc_arg.add_argument('--log_dir', type=str, default= main_path + 'cis680/logs/HW2/' + log_sub_path)
 misc_arg.add_argument('--data_dir', type=str, default= main_path + 'cis680/data/')
