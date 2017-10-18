@@ -26,10 +26,11 @@ data_arg.add_argument('--batch_size_test', type=int, default=100)
 # Training / test parameters
 train_arg = add_argument_group('Training')
 train_arg.add_argument('--is_train', type=str2bool, default=True)
+train_arg.add_argument('--use_pretrained', type=str2bool, default=False)
 train_arg.add_argument('--optimizer', type=str, default='adam')
 train_arg.add_argument('--max_step', type=int, default=2000)
 train_arg.add_argument('--epoch_step', type=int, default=100)
-train_arg.add_argument('--lr', type=float, default=1e-3)
+train_arg.add_argument('--lr', type=float, default=1e-3) # 1e-4: to resolve gradient vanishing using 1 res. Original: 1e-3 
 train_arg.add_argument('--min_lr', type=float, default=1e-4)
 train_arg.add_argument('--wd_ratio', type=float, default=5e-2)
 train_arg.add_argument('--use_gpu', type=str2bool, default=True)
@@ -38,19 +39,20 @@ train_arg.add_argument('--use_gpu', type=str2bool, default=True)
 main_path = '/home/tynguyen/'
 #main_path = '/media/sf_cogntivive_school/' 
 misc_arg = add_argument_group('Misc')
-misc_arg.add_argument('--log_step', type=int, default=100)
+misc_arg.add_argument('--log_step', type=int, default=10)
 misc_arg.add_argument('--test_iter', type=int, default=100)
 misc_arg.add_argument('--save_step', type=int, default=100)
 misc_arg.add_argument('--log_level', type=str, default='INFO', choices=['INFO', 'DEBUG', 'WARN'])
 
-log_sub_path = 'customized_cnn_vanish' 
+# log_sub_path = 'customized_cnn' 
+log_sub_path = 'customized_cnn_resolve_grad_vanish' 
 misc_arg.add_argument('--load_path', type=str, default= main_path + 'cis680/logs/HW2/' + log_sub_path)
 misc_arg.add_argument('--log_dir', type=str, default= main_path + 'cis680/logs/HW2/' + log_sub_path)
 misc_arg.add_argument('--data_dir', type=str, default= main_path + 'cis680/data/')
 misc_arg.add_argument('--random_seed', type=int, default=0)
 
 # Question 1.1, 1.2: choose normalizing or not 
-misc_arg.add_argument('--preprocessing_list', nargs='+',default=[None])#['flip_horizontal','normalize','pad_crop'])#) # set default = [None] to do nothing 
+misc_arg.add_argument('--preprocessing_list', nargs='+',default=[None])#['flip_horizontal','normalize','pad_crop']) # set default = [None] to do nothing 
 
 # Question 2.1 
 # misc_arg.add_argument('--cnn_model', type=str, default='quick_cnn')
@@ -59,6 +61,9 @@ misc_arg.add_argument('--cnn_model', type=str, default='customized_cnn')
 misc_arg.add_argument('--get_cnn_grad', type=str2bool, default=True)
 # Question 2.3 
 misc_arg.add_argument('--make_grad_vanish', type=str2bool, default=False) # Default should be False 
+# Question 2.4: resolve gradient vainishing 
+misc_arg.add_argument('--resolve_grad_vanish', type=str2bool, default=False) # Default should be False 
+
 def get_config():
   config, unparsed = parser.parse_known_args()
   return config, unparsed    

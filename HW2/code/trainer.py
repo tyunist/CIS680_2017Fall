@@ -46,6 +46,8 @@ class Trainer(object):
 
     # Question 2.3: generate gradient vanishing 
     self.make_grad_vanish = config.make_grad_vanish
+    # Question 2.4: resolve gradient vanishing 
+    self.resolve_grad_vanish=config.resolve_grad_vanish 
 
     # Exponential learning rate decay
     self.epoch_num = config.max_step / config.epoch_step
@@ -55,6 +57,7 @@ class Trainer(object):
     self.c_num = config.c_num
 
     self.model_dir = config.model_dir
+    self.log_dir = config.log_dir
     self.load_path = config.load_path
     print('...Building model')
     self.build_model()
@@ -113,12 +116,12 @@ class Trainer(object):
         self.summary_writer.add_summary(result['summary'], step)
         self.summary_writer.flush()
 
-        lr = result['lr']
-        c_loss = result['c_loss']
-        accuracy = result['accuracy']
+        # lr = result['lr']
+        # c_loss = result['c_loss']
+        # accuracy = result['accuracy']
 
-        print("\n[{}/{}:{:.6f}] Loss_C: {:.6f} Accuracy: {:.4f}" . \
-              format(step, self.max_step, lr, c_loss, accuracy))
+        print("\n[{}/{}:{:.6f}] Loss_C: {:.6f} Accuracy: {:.4f} conv1_grad: {:.6f} conv4_grad: {:.6f}" . \
+              format(step, self.max_step, lr, c_loss, accuracy, conv1_grad, conv4_grad ))
         sys.stdout.flush()
 
       if step % self.save_step == self.save_step - 1:
@@ -154,7 +157,7 @@ class Trainer(object):
 
     self.c_loss, feat, self.accuracy, self.c_var = self.cnn_model_set[self.cnn_model_name](
       x, self.labels, self.c_num, self.batch_size, is_train=True, reuse=False,\
-      make_grad_vanish=self.make_grad_vanish)
+      make_grad_vanish=self.make_grad_vanish, resolve_grad_vanish=self.resolve_grad_vanish)
     self.c_loss = tf.reduce_mean(self.c_loss, 0)
 
     # Gather gradients of conv1 & conv4 weights for logging
@@ -224,4 +227,4 @@ class Trainer(object):
 
     loss, self.test_feat, self.test_accuracy, var = self.cnn_model_set[self.cnn_model_name](
       test_x, self.test_labels, self.c_num, self.batch_size_test, is_train=False, reuse=True, \
-      make_grad_vanish=self.make_grad_vanish)
+      make_grad_vanish=self.make_grad_vanish, resolve_grad_vanish=self.resolve_grad_vanish)

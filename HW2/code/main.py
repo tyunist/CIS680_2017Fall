@@ -1,6 +1,6 @@
 import numpy as np                                                                                    
 import tensorflow as tf
-import os 
+import os, shutil
 from trainer import Trainer
 from config import get_config
 from data_loader import get_loader, download_data 
@@ -31,13 +31,21 @@ def main(config):
       config.split = 'test'
     else: 
       config.split = 'train'
-      print('...Testing ')
+    print('...Testing on %s data'%config.split)
+
     test_data_loader, test_label_loader = get_loader(
       config.data_path, config.batch_size_test, config.preprocessing_list, config.split, False)
+  print('\n.....Training mode')
+  
+  if not config.use_pretrained:
+    print('.....Deleting the current model in:', os.path.join(config.model_dir, '*'))
+    try:
+      shutil.rmtree(config.model_dir)
+    except:
+      pass 
   print('\n.....Start training')
   trainer = Trainer(config, train_data_loader, train_label_loader, test_data_loader, test_label_loader)
   if config.is_train:
-    print('\n.....Training mode')
     save_config(config)
     train_error_set = trainer.train()
       # Draw training error 

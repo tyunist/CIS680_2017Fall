@@ -31,7 +31,7 @@ def read_labeled_image_list(img_list_path, img_dir):
   for line in f:
     img_name, lab = line[:-1].split(' ')
     img_paths.append(img_dir + img_name)
-    labs.append(int(lab))
+    labs.append(int(lab)) 
   f.close()
   return img_paths, labs
 
@@ -60,7 +60,7 @@ def get_loader(root, batch_size, mode_list=[None], split=None, shuffle=True):
   """
   img_paths_np, labs_np = read_labeled_image_list(root+ '/' + split+'.txt', root+'/imgs/')
 
-  with tf.device('/cpu:0'):
+  with tf.device('/cpu:1'):
     img_paths = tf.convert_to_tensor(img_paths_np, dtype=tf.string)
     labs = tf.convert_to_tensor(labs_np, dtype=tf.int64)
 

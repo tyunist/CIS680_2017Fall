@@ -13,8 +13,8 @@ def conv_factory(x, hidden_num, kernel_size, stride, is_train, reuse, use_bn=Tru
   if use_bn:
     x = slim.batch_norm(x, is_training=is_train, reuse=reuse, scale=True,
         fused=True, scope=vs, updates_collections=None)
-  #x = tf.nn.relu(x)
-  x = tf.nn.sigmoid(x)
+  x = tf.nn.relu(x)
+  # x = tf.nn.sigmoid(x)
   return x
 
 def fc_factory(x, hidden_num, is_train, reuse, use_bn=True):
