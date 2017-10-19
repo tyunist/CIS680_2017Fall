@@ -20,13 +20,13 @@ net_arg.add_argument('--c_num', type=int, default=10)  # Number of classes
 data_arg = add_argument_group('Data')
 data_arg.add_argument('--dataset', type=str, default='cifar10', choices=['cifar10', 'cifar100'])
 data_arg.add_argument('--split', type=str, default='train')
-data_arg.add_argument('--batch_size', type=int, default=20)
-data_arg.add_argument('--batch_size_test', type=int, default=20)
+data_arg.add_argument('--batch_size', type=int, default=100)
+data_arg.add_argument('--batch_size_test', type=int, default=100)
 
 # Training / test parameters
 train_arg = add_argument_group('Training')
 train_arg.add_argument('--is_train', type=str2bool, default=True)
-train_arg.add_argument('--use_pretrained', type=str2bool, default=True)
+train_arg.add_argument('--use_pretrained', type=str2bool, default=False)
 train_arg.add_argument('--optimizer', type=str, default='adam')
 train_arg.add_argument('--max_step', type=int, default=2000)
 train_arg.add_argument('--epoch_step', type=int, default=100)
@@ -42,7 +42,7 @@ misc_arg = add_argument_group('Misc')
 misc_arg.add_argument('--log_step', type=int, default=10)
 misc_arg.add_argument('--test_iter', type=int, default=100)
 misc_arg.add_argument('--save_step', type=int, default=100)
-misc_arg.add_argument('--log_level', type=str, default='DEBUG', choices=['INFO', 'DEBUG', 'WARN'])
+misc_arg.add_argument('--log_level', type=str, default='INFO', choices=['INFO', 'DEBUG', 'WARN'])
 
 # log_sub_path = 'customized_cnn' 
 log_sub_path = 'quick_cnn_normalize' 
@@ -58,7 +58,7 @@ misc_arg.add_argument('--preprocessing_list', nargs='+',default=  ['normalize'])
 misc_arg.add_argument('--cnn_model', type=str, default='quick_cnn')
 # misc_arg.add_argument('--cnn_model', type=str, default='customized_cnn')
 # Question 2.2 
-misc_arg.add_argument('--get_cnn_grad', type=str2bool, default=True)
+misc_arg.add_argument('--get_cnn_grad', type=str2bool, default=False)
 # Question 2.3 
 misc_arg.add_argument('--make_grad_vanish', type=str2bool, default=False) # Default should be False 
 # Question 2.4: resolve gradient vainishing 

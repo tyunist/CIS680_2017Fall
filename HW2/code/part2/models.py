@@ -46,13 +46,11 @@ def quick_cnn(x, labels, c_num, batch_size, is_train, reuse, make_grad_vanish=Fa
 
     # Softmax
     with tf.variable_scope('sm', reuse=reuse):
-      probs = tf.nn.softmax(logits=x, name='softmax')
-      confidence = tf.reduce_max(tf.one_hot(labels, c_num)*probs)
       loss = tf.nn.softmax_cross_entropy_with_logits(logits=x, labels=tf.one_hot(labels, c_num))
       accuracy = tf.reduce_mean(tf.to_float(tf.equal(tf.argmax(x, axis=1), labels)))
 
   variables = tf.contrib.framework.get_variables(vs)
-  return loss, feat, accuracy, variables, confidence
+  return loss, feat, accuracy, variables
 
 
 def customized_cnn(x, labels, c_num, batch_size, is_train, reuse, make_grad_vanish=False, resolve_grad_vanish=False):
@@ -135,10 +133,8 @@ def customized_cnn(x, labels, c_num, batch_size, is_train, reuse, make_grad_vani
 
     # Softmax
     with tf.variable_scope('sm', reuse=reuse):
-      probs = tf.nn.softmax(logits=x, name='softmax')
-      confidence = tf.reduce_max(tf.one_hot(labels, c_num)*probs)
       loss = tf.nn.softmax_cross_entropy_with_logits(logits=x, labels=tf.one_hot(labels, c_num))
       accuracy = tf.reduce_mean(tf.to_float(tf.equal(tf.argmax(x, axis=1), labels)))
 
   variables = tf.contrib.framework.get_variables(vs)
-  return loss, feat, accuracy, variables, confidence 
+  return loss, feat, accuracy, variables

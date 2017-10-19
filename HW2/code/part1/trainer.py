@@ -17,12 +17,13 @@ def denorm_img(img):
 
 
 class Trainer(object):
-  def __init__(self, config, data_loader, correct_label_loader, wrong_label_loader=None):
+  def __init__(self, config, data_loader, label_loader, test_data_loader, test_label_loader):
 
     self.config = config
     self.data_loader = data_loader
-    self.correct_label_loader = correct_label_loader
-    self.wrong_label_loader = wrong_label_loader
+    self.label_loader = label_loader
+    self.test_data_loader = test_data_loader
+    self.test_label_loader = test_label_loader
 
     self.optimizer = config.optimizer
     self.batch_size = config.batch_size
@@ -61,7 +62,6 @@ class Trainer(object):
     print('...Building model')
     self.build_model()
     self.build_test_model()
- 
     print('...Create saver')
     self.saver = tf.train.Saver()
     print('...Model dir:', self.model_dir) 
@@ -71,7 +71,7 @@ class Trainer(object):
                              saver=self.saver,
                              summary_op=None,
                              summary_writer=self.summary_writer,
-                             save_model_secs=0, # No checkpoints 
+                             save_model_secs=60,
                              global_step=self.step,
                              ready_for_local_init_op=None)
 
@@ -80,37 +80,29 @@ class Trainer(object):
                                  gpu_options=gpu_options)
 
     self.sess = sv.prepare_or_wait_for_session(config=sess_config)
-    
 
   def train(self):
-    print('\n.....-----------------------------------------------.....')
-    print('....Restoring checkpoint')
-    self.saver.restore(self.sess, tf.train.latest_checkpoint(self.model_dir)) 
     training_log_set = np.zeros([self.max_step - self.start_step,6], dtype=np.float32)
     save_test_accuracy = 0 
     for step in trange(self.start_step, self.max_step):
       fetch_dict = {
-        # 'c_optim': self.c_optim,
-        # 'wd_optim': self.wd_optim,
+        'c_optim': self.c_optim,
+        'wd_optim': self.wd_optim,
         'c_loss': self.c_loss,
         'accuracy': self.accuracy,
         'lr': self.lr,
         'conv1_grad': self.conv1_grad,
-        'conv4_grad': self.conv4_grad,
-        'confidence': self.confidence, 
-        'x_grad': self.x_grad}
+        'conv4_grad': self.conv4_grad }
 
       if step % self.log_step == self.log_step - 1:
         fetch_dict.update({
-          # 'c_optim': self.c_optim,
-          # 'wd_optim': self.wd_optim,
+          'c_optim': self.c_optim,
+          'wd_optim': self.wd_optim,
           'c_loss': self.c_loss,
           'accuracy': self.accuracy, 
           'lr': self.lr,
           'conv1_grad': self.conv1_grad,
-          'conv4_grad': self.conv4_grad,
-          'confidence': self.confidence, 
-          'x_grad': self.x_grad, 
+          'conv4_grad': self.conv4_grad, 
           'summary': self.summary_op })
 
       result = self.sess.run(fetch_dict)
@@ -119,8 +111,6 @@ class Trainer(object):
       accuracy = result['accuracy']
       conv1_grad = result['conv1_grad']
       conv4_grad = result['conv4_grad']
-      x_grad = result['x_grad']
-      confidence = result['confidence']
       training_log_set[step] = [lr, c_loss, accuracy, conv1_grad, conv4_grad, save_test_accuracy]
 
       if step % self.log_step == self.log_step - 1:
@@ -131,30 +121,44 @@ class Trainer(object):
         # c_loss = result['c_loss']
         # accuracy = result['accuracy']
 
-        print("\n[{}/{}:{:.6f}] Loss_C: {:.6f} Accuracy: {:.4f} conv1_grad: {:.6f} conv4_grad: {:.6f} x_grad" . \
-              format(step, self.max_step, lr, c_loss, accuracy, conv1_grad, conv4_grad, x_grad ))
-        print("\n confidence: {:.6f}" . \
-              format(confidence ))       
+        print("\n[{}/{}:{:.6f}] Loss_C: {:.6f} Accuracy: {:.4f} conv1_grad: {:.6f} conv4_grad: {:.6f}" . \
+              format(step, self.max_step, lr, c_loss, accuracy, conv1_grad, conv4_grad ))
         sys.stdout.flush()
- 
+
+      if step % self.save_step == self.save_step - 1:
+        self.saver.save(self.sess, self.model_dir + '/model',global_step=step)
         
+        test_accuracy = 0
+        for iter in xrange(self.test_iter):
+          fetch_dict = { "test_accuracy":self.test_accuracy }
+          result = self.sess.run(fetch_dict)
+          test_accuracy += result['test_accuracy']
+        test_accuracy /= self.test_iter
+        save_test_accuracy = test_accuracy 
+
+        print("\n[{}/{}:{:.6f}] Test Accuracy: {:.4f}" . \
+              format(step, self.max_step, lr, test_accuracy))
+        sys.stdout.flush()
+
+
       if step % self.epoch_step == self.epoch_step - 1:
         self.sess.run([self.lr_update])
-
-      # self.x = self.x + self.x_grad 
- 
+    self.saver.save(self.sess, self.model_dir + '/model', global_step=step)
     return training_log_set
 
   def build_model(self):
     self.x = self.data_loader
-    self.correct_labels = self.correct_label_loader
-    self.wrong_labels = self.wrong_label_loader
+    self.labels = self.label_loader
+    # if self.is_normalize:
+    #   print '....Mode: normalize'
+    #   x = norm_img(self.x)
+    # else:
     x = self.x 
+      # print '....Mode: Do not normalize'
 
 
-    # Run forward part, no gradient, use wrong label. 
-    self.c_loss, feat, self.accuracy, self.c_var, self.confidence = self.cnn_model_set[self.cnn_model_name](
-      x, self.wrong_labels, self.c_num, self.batch_size, is_train=False, reuse=False,\
+    self.c_loss, feat, self.accuracy, self.c_var = self.cnn_model_set[self.cnn_model_name](
+      x, self.labels, self.c_num, self.batch_size, is_train=True, reuse=False,\
       make_grad_vanish=self.make_grad_vanish, resolve_grad_vanish=self.resolve_grad_vanish)
     self.c_loss = tf.reduce_mean(self.c_loss, 0)
 
@@ -170,28 +174,24 @@ class Trainer(object):
     # Gradient w.r.t x 
     x_grad = tf.gradients(self.c_loss, x) #, self.c_loss)
     x_grad = tf.reduce_sum(tf.abs(x_grad[0]), 3, True)
-    
     x_grad = (x_grad - tf.reduce_min(x_grad)) / (tf.reduce_max(x_grad) - tf.reduce_mean(x_grad))
     self.x_grad = tf.multiply(self.x , x_grad)
-    self.x_grad = 0.007*x_grad
- 
-    self.x = self.x + self.x_grad 
 
-    # wd_optimizer = tf.train.GradientDescentOptimizer(self.lr)
-    # if self.optimizer == 'sgd':
-    #   c_optimizer = tf.train.MomentumOptimizer(self.lr, 0.9)
-    # elif self.optimizer == 'adam':
-    #   c_optimizer = tf.train.AdamOptimizer(self.lr)
-    # else:
-    #   raise Exception("[!] Caution! Don't use {} opimizer.".format(self.optimizer))
+    wd_optimizer = tf.train.GradientDescentOptimizer(self.lr)
+    if self.optimizer == 'sgd':
+      c_optimizer = tf.train.MomentumOptimizer(self.lr, 0.9)
+    elif self.optimizer == 'adam':
+      c_optimizer = tf.train.AdamOptimizer(self.lr)
+    else:
+      raise Exception("[!] Caution! Don't use {} opimizer.".format(self.optimizer))
 
-    # for var in tf.trainable_variables():
-    #   weight_decay = tf.multiply(tf.nn.l2_loss(var), self.wd_ratio)
-    #   tf.add_to_collection('losses', weight_decay)
-    # wd_loss = tf.add_n(tf.get_collection('losses'))
+    for var in tf.trainable_variables():
+      weight_decay = tf.multiply(tf.nn.l2_loss(var), self.wd_ratio)
+      tf.add_to_collection('losses', weight_decay)
+    wd_loss = tf.add_n(tf.get_collection('losses'))
 
-    # self.c_optim = c_optimizer.minimize(self.c_loss, var_list=self.c_var)
-    # self.wd_optim = wd_optimizer.minimize(wd_loss)
+    self.c_optim = c_optimizer.minimize(self.c_loss, var_list=self.c_var)
+    self.wd_optim = wd_optimizer.minimize(wd_loss)
 
     self.summary_op = tf.summary.merge([
       tf.summary.scalar("c_loss", self.c_loss),
@@ -210,7 +210,6 @@ class Trainer(object):
     print('>>>  model_dir:', self.model_dir) 
     
     self.saver.restore(self.sess, tf.train.latest_checkpoint(self.model_dir)) 
-    print('>>> Finish restoring')
     test_accuracy = 0
     for iter in trange(self.test_iter):
       fetch_dict = {"test_accuracy":self.test_accuracy}
@@ -221,14 +220,13 @@ class Trainer(object):
     print("Accuracy: {:.4f}" . format(test_accuracy))
 
   def build_test_model(self):
-    self.test_x = self.data_loader
-    self.test_labels = self.correct_label_loader 
+    self.test_x = self.test_data_loader
+    self.test_labels = self.test_label_loader
     # if self.is_normalize:
     #   test_x = norm_img(self.test_x)
     # else:
     test_x = self.test_x 
 
-    loss, self.test_feat, self.test_accuracy, var, confidence = self.cnn_model_set[self.cnn_model_name](
+    loss, self.test_feat, self.test_accuracy, var = self.cnn_model_set[self.cnn_model_name](
       test_x, self.test_labels, self.c_num, self.batch_size_test, is_train=False, reuse=True, \
       make_grad_vanish=self.make_grad_vanish, resolve_grad_vanish=self.resolve_grad_vanish)
- 
