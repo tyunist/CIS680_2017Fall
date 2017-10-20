@@ -59,7 +59,7 @@ class Trainer(object):
     self.log_dir = config.log_dir
     self.load_path = config.load_path
     print('...Building model')
-    self.build_model()
+    self.build_model(first_time=True)
     self.build_test_model()
  
     print('...Create saver')
@@ -98,7 +98,8 @@ class Trainer(object):
         'conv1_grad': self.conv1_grad,
         'conv4_grad': self.conv4_grad,
         'confidence': self.confidence, 
-        'x_grad': self.x_grad}
+        'x_grad': self.x_grad,
+        'x': self.x}
 
       if step % self.log_step == self.log_step - 1:
         fetch_dict.update({
@@ -110,7 +111,8 @@ class Trainer(object):
           'conv1_grad': self.conv1_grad,
           'conv4_grad': self.conv4_grad,
           'confidence': self.confidence, 
-          'x_grad': self.x_grad, 
+          'x_grad': self.x_grad,
+          'x': self.x ,  
           'summary': self.summary_op })
 
       result = self.sess.run(fetch_dict)
@@ -121,7 +123,14 @@ class Trainer(object):
       conv4_grad = result['conv4_grad']
       x_grad = result['x_grad']
       confidence = result['confidence']
+      x = result['x'] 
       training_log_set[step] = [lr, c_loss, accuracy, conv1_grad, conv4_grad, save_test_accuracy]
+      
+      self.x = self.x + 0.7*self.x_grad 
+      # Clip x 
+      max_value = tf.constant(255, shape=self.x.get_shape().as_list())
+      min_value = tf.constant(0, shape=self.x.get_shape().as_list())
+      self.x = tf.clip_by_value(self.x, tf.cast(min_value, tf.float32),tf.cast( max_value, tf.float32)) 
 
       if step % self.log_step == self.log_step - 1:
         self.summary_writer.add_summary(result['summary'], step)
@@ -131,10 +140,11 @@ class Trainer(object):
         # c_loss = result['c_loss']
         # accuracy = result['accuracy']
 
-        print("\n[{}/{}:{:.6f}] Loss_C: {:.6f} Accuracy: {:.4f} conv1_grad: {:.6f} conv4_grad: {:.6f} x_grad" . \
-              format(step, self.max_step, lr, c_loss, accuracy, conv1_grad, conv4_grad, x_grad ))
-        print("\n confidence: {:.6f}" . \
-              format(confidence ))       
+        print("\n[{}/{}:{:.6f}] Loss_C: {:.6f} Accuracy: {:.4f} conv1_grad: {:.6f} conv4_grad: {:.6f} " . \
+              format(step, self.max_step, lr, c_loss, accuracy, conv1_grad, conv4_grad))
+        print("\n confidence:",confidence)       
+        print("\n x_grad:", np.sum(x_grad)) 
+        print('x:', np.sum(x))
         sys.stdout.flush()
  
         
@@ -145,13 +155,16 @@ class Trainer(object):
  
     return training_log_set
 
-  def build_model(self):
-    self.x = self.data_loader
-    self.correct_labels = self.correct_label_loader
-    self.wrong_labels = self.wrong_label_loader
-    x = self.x 
+  def build_model(self, first_time=False):
+    if first_time:
+      x = self.data_loader
+      self.x = x 
+      self.orig_x = x 
+      self.correct_labels = self.correct_label_loader
+      self.wrong_labels = self.wrong_label_loader
 
-
+    else:
+      x = self.x 
     # Run forward part, no gradient, use wrong label. 
     self.c_loss, feat, self.accuracy, self.c_var, self.confidence = self.cnn_model_set[self.cnn_model_name](
       x, self.wrong_labels, self.c_num, self.batch_size, is_train=False, reuse=False,\
@@ -168,15 +181,14 @@ class Trainer(object):
     self.conv4_grad = tf.reduce_max(tf.abs(tf.gradients(self.c_loss, conv4_weights)))#, self.c_loss)))
 
     # Gradient w.r.t x 
-    x_grad = tf.gradients(self.c_loss, x) #, self.c_loss)
-    x_grad = tf.reduce_sum(tf.abs(x_grad[0]), 3, True)
+    x_grad = tf.gradients(self.c_loss, x, self.c_loss)
+    #x_grad = tf.reduce_sum(tf.abs(x_grad[0]), 3, True)
+    x_grad = x_grad[0] 
+  
+    #x_grad = (x_grad - tf.reduce_min(x_grad)) / (tf.reduce_max(x_grad) - tf.reduce_mean(x_grad))
+    self.x_grad = tf.sign(x_grad) 
+    #self.x_grad = x_grad 
     
-    x_grad = (x_grad - tf.reduce_min(x_grad)) / (tf.reduce_max(x_grad) - tf.reduce_mean(x_grad))
-    self.x_grad = tf.multiply(self.x , x_grad)
-    self.x_grad = 0.007*x_grad
- 
-    self.x = self.x + self.x_grad 
-
     # wd_optimizer = tf.train.GradientDescentOptimizer(self.lr)
     # if self.optimizer == 'sgd':
     #   c_optimizer = tf.train.MomentumOptimizer(self.lr, 0.9)
@@ -200,6 +212,7 @@ class Trainer(object):
       tf.summary.scalar("conv1_grad", self.conv1_grad),
       tf.summary.scalar("conv4_grad", self.conv4_grad),
 
+      tf.summary.image("orig_inputs", self.orig_x),
       tf.summary.image("inputs", self.x),
       tf.summary.image("x_grad", self.x_grad),
 

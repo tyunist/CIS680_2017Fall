@@ -28,7 +28,7 @@ train_arg = add_argument_group('Training')
 train_arg.add_argument('--is_train', type=str2bool, default=True)
 train_arg.add_argument('--use_pretrained', type=str2bool, default=True)
 train_arg.add_argument('--optimizer', type=str, default='adam')
-train_arg.add_argument('--max_step', type=int, default=2000)
+train_arg.add_argument('--max_step', type=int, default=200000)
 train_arg.add_argument('--epoch_step', type=int, default=100)
 train_arg.add_argument('--lr', type=float, default=1e-3) # 1e-4: to resolve gradient vanishing using 1 res. Original: 1e-3 
 train_arg.add_argument('--min_lr', type=float, default=1e-4)
