@@ -63,11 +63,11 @@ def customized_cnn(x, labels, c_num, batch_size, is_train, reuse, make_grad_vani
       if resolve_grad_vanish:
         hidden_num = 32 
       else:
-        hidden_num = 128  
+        hidden_num = 128 # test 128 -> 32  
       x = conv_factory(x, hidden_num, 3, 1, is_train, reuse, use_bn=use_bn)
       res_conv = x 
       conv1 = x 
-      if make_grad_vanish and resolve_grad_vanish: 
+      if make_grad_vanish and resolve_grad_vanish:   # test 
         x = tf.nn.max_pool(x, ksize=[1,2,2,1], strides=[1,2,2,1], padding='VALID')  
 
 
@@ -92,10 +92,10 @@ def customized_cnn(x, labels, c_num, batch_size, is_train, reuse, make_grad_vani
   
     # conv2
     with tf.variable_scope('conv2', reuse=reuse):
-      if resolve_grad_vanish:
-        hidden_num = hidden_num*2 
+      # if resolve_grad_vanish: # test 
+      hidden_num = hidden_num*2 
       x = conv_factory(x, hidden_num, 3, 1, is_train, reuse, use_bn=use_bn)
-      if not resolve_grad_vanish:
+      if not resolve_grad_vanish:  
         x = tf.nn.max_pool(x, ksize=[1,2,2,1], strides=[1,2,2,1], padding='VALID')
 
     # dropout
@@ -118,8 +118,8 @@ def customized_cnn(x, labels, c_num, batch_size, is_train, reuse, make_grad_vani
 
     # conv4
     with tf.variable_scope('conv4', reuse=reuse):
-      if resolve_grad_vanish:
-        hidden_num =  2*hidden_num
+      # if resolve_grad_vanish: # test 
+      hidden_num =  2*hidden_num
       x = conv_factory(x, hidden_num, 3, 1, is_train, reuse, use_bn=use_bn)
       # if not resolve_grad_vanish:
       x = tf.nn.max_pool(x, ksize=[1,2,2,1], strides=[1,2,2,1], padding='VALID')  
@@ -127,11 +127,12 @@ def customized_cnn(x, labels, c_num, batch_size, is_train, reuse, make_grad_vani
 
     # conv5 (1x1)
     with tf.variable_scope('conv5', reuse=reuse):
-      hidden_num = 2*hidden_num 
+      hidden_num = 2*hidden_num  
       x = conv_factory(x, hidden_num, 1, 1, is_train, reuse, use_bn=use_bn)
-      # if not resolve_grad_vanish:
-      x = tf.nn.avg_pool(x, ksize=[1,4,4,1], strides=[1,16,16,1], padding='VALID') #V15 8 => 16
- 
+      if not resolve_grad_vanish:
+        x = tf.nn.avg_pool(x, ksize=[1,4,4,1], strides=[1,4,4,1], padding='VALID') # 
+      else:
+        x = tf.nn.avg_pool(x, ksize=[1,4,4,1], strides=[1,4,4,1], padding='VALID') # 8/2 -> 4/2 
  
     x = tf.reshape(x, [batch_size, -1])
     x_size = x.get_shape().as_list()

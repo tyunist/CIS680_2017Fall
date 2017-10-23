@@ -44,7 +44,7 @@ misc_arg.add_argument('--test_iter', type=int, default=100)
 misc_arg.add_argument('--save_step', type=int, default=100)
 misc_arg.add_argument('--log_level', type=str, default='INFO', choices=['INFO', 'DEBUG', 'WARN'])
 
-log_sub_path = 'customized_cnn_resolve_grad_vanish_15' 
+log_sub_path = 'customized_cnn_normalize' 
 #log_sub_path = 'quick_cnn_normalize' 
 misc_arg.add_argument('--load_path', type=str, default= main_path + 'cis680/logs/HW2/' + log_sub_path)
 misc_arg.add_argument('--log_dir', type=str, default= main_path + 'cis680/logs/HW2/' + log_sub_path)
@@ -60,9 +60,9 @@ misc_arg.add_argument('--cnn_model', type=str, default='customized_cnn')
 # Question 2.2 
 misc_arg.add_argument('--get_cnn_grad', type=str2bool, default=True)
 # Question 2.3 
-misc_arg.add_argument('--make_grad_vanish', type=str2bool, default=True) # Default should be False 
+misc_arg.add_argument('--make_grad_vanish', type=str2bool, default=False) # Default should be False 
 # Question 2.4: resolve gradient vainishing 
-misc_arg.add_argument('--resolve_grad_vanish', type=str2bool, default=True) # Default should be False 
+misc_arg.add_argument('--resolve_grad_vanish', type=str2bool, default=False) # Default should be False 
 
 def get_config():
   config, unparsed = parser.parse_known_args()

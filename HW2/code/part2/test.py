@@ -1,6 +1,7 @@
 import numpy as np 
 
-x = np.array([[ 0.1320949 ,  0.21549071,  0.13195828,  0.02310762,  0.22745451,
-         0.02197906,  0.11016654,  0.04668037,  0.06791957,  0.02314852]], dtype=np.float32)
+x = np.arange(4)
+print x
 
- 
+np.delete(x,x[0])
+print  x
