@@ -1,8 +1,13 @@
-import os
+import os, pdb 
 import numpy as np
 import tensorflow as tf
 import dataset_utils
 slim = tf.contrib.slim
+
+IMG_MEAN = 121.285
+IMG_STD = 64.226
+ 
+
 def download_data(data_path, unpack=False):
   url = "http://www.cs.toronto.edu/~kriz/cifar-10-python.tar.gz"
   if not tf.gfile.Exists(data_path):
@@ -60,8 +65,8 @@ def get_loader(root, batch_size, mode_list=[None], split=None, shuffle=True):
     lab_batch: A (int) tensor containing a batch of labels.
   """
   img_paths_np, labs_np = read_labeled_image_list(root+ '/' + split+'.txt', root+'/imgs/')
-
-  with tf.device('/cpu:1'):
+ 
+  with tf.device('/cpu:2'):
     img_paths = tf.convert_to_tensor(img_paths_np, dtype=tf.string)
     labs = tf.convert_to_tensor(labs_np, dtype=tf.int64)
 
@@ -89,8 +94,7 @@ def get_loader(root, batch_size, mode_list=[None], split=None, shuffle=True):
       if 'normalize' in mode_list:
         print '...Mode: normalize'
         # vs = tf.get_variable_scope()
-        mean, var = tf.nn.moments(img_batch, axes=[0,1,2], keep_dims=True)
-        img_batch = (img_batch - mean)/tf.sqrt(var)
+        img_batch = (img_batch - IMG_MEAN)/IMG_STD
         # img_batch = slim.batch_norm(img_batch, is_training=False, reuse=None, scale=True, scope=vs)
       if 'pad_crop' in mode_list and split=='train':
           print '...Mode: zero pad and cropping'

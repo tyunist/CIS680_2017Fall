@@ -1,9 +1,10 @@
-import numpy as np                                                                                    
+import numpy as np
+import pdb                                                                                      
 import tensorflow as tf
 import os, shutil
 from trainer import Trainer
 from config import get_config
-from data_loader import get_loader, download_data, get_some_test_images_loader 
+from data_loader import get_loader, download_data, get_some_test_images_loader, np_get_some_test_images 
 from utils import prepare_dirs_and_logger, save_config
 import matplotlib.pyplot as plt 
 def main(config):
@@ -22,9 +23,9 @@ def main(config):
   print('...*****************Training mode*************************...')
   print('\n.....Obtain train & test batches')
   # Load 20 images for the first time 
-  train_data_loader, train_correct_label_loader, train_wrong_label_loader = get_some_test_images_loader(config.data_path, 2, \
+  train_data_loader, train_correct_label_loader, train_wrong_label_loader = np_get_some_test_images(config.data_path, 1, \
                                                 config.batch_size, config.preprocessing_list)
-
+  pdb.set_trace() 
   if not config.use_pretrained:
     print('.....Deleting the current model in:', os.path.join(config.model_dir, '*'))
     try:

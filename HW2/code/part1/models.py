@@ -30,7 +30,7 @@ def quick_cnn(x, labels, c_num, batch_size, is_train, reuse, make_grad_vanish=Fa
     #  x = tf.nn.dropout(x, keep_prob=0.5)
     # fc4
     with tf.variable_scope('conv4', reuse=reuse):
-      x = tf.reshape(x, [batch_size, -1])
+      x = tf.contrib.layers.flatten(x)
       x = fc_factory(x, hidden_num, is_train, reuse)
     feat = x
 

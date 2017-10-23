@@ -32,7 +32,6 @@ def unpack_cifar10(raw_path, PIXELS_DIR = "imgs"):
     """
         Entry point.
     """
-    sum_pixel_intensity = np.zeros(3072*20000)
     train_label_file = "train.txt"
     test_label_file = "test.txt"
     
@@ -78,9 +77,7 @@ def unpack_cifar10(raw_path, PIXELS_DIR = "imgs"):
             # save the image and store the label
             save_as_image(img_flat, fname)
             train_labels[fname] = label
-            # # Accumulate sum_intensity 
-            sum_pixel_intensity[i*3072:(i+1)*3072]= img_flat
- 
+
     # write out labels file
     with open(train_label_file, "w") as f:
         for (fname, label) in train_labels.iteritems():
@@ -98,18 +95,11 @@ def unpack_cifar10(raw_path, PIXELS_DIR = "imgs"):
             # save the image and store the label
             save_as_image(img_flat, fname)
             test_labels[fname] = label
-            sum_pixel_intensity[(10000+i)*3072:(i+10000+1)*3072]= img_flat
-            
+
     # write out labels file
     with open(test_label_file, "w") as f:
         for (fname, label) in test_labels.iteritems():
             f.write("{0} {1}\n".format(fname, label))
-
-    # Compute mean and var of intensity 
-    print('Final pixel:', sum_pixel_intensity[19999])
-    print ('Mean:', np.mean(sum_pixel_intensity))
-    print ('std:', np.std(sum_pixel_intensity))
-
 
 
 ######################################################

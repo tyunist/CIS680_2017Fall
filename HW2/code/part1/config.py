@@ -22,6 +22,8 @@ data_arg.add_argument('--dataset', type=str, default='cifar10', choices=['cifar1
 data_arg.add_argument('--split', type=str, default='train')
 data_arg.add_argument('--batch_size', type=int, default=100)
 data_arg.add_argument('--batch_size_test', type=int, default=100)
+data_arg.add_argument('--img_mean', type=float, default=121.285)
+data_arg.add_argument('--img_std', type=float, default=64.2264)
 
 # Training / test parameters
 train_arg = add_argument_group('Training')
@@ -45,14 +47,14 @@ misc_arg.add_argument('--save_step', type=int, default=100)
 misc_arg.add_argument('--log_level', type=str, default='INFO', choices=['INFO', 'DEBUG', 'WARN'])
 
 # log_sub_path = 'customized_cnn' 
-log_sub_path = 'quick_cnn_normalize' 
+log_sub_path = 'quick_cnn' 
 misc_arg.add_argument('--load_path', type=str, default= main_path + 'cis680/logs/HW2/' + log_sub_path)
 misc_arg.add_argument('--log_dir', type=str, default= main_path + 'cis680/logs/HW2/' + log_sub_path)
 misc_arg.add_argument('--data_dir', type=str, default= main_path + 'cis680/data/')
 misc_arg.add_argument('--random_seed', type=int, default=0)
 
 # Question 1.1, 1.2: choose normalizing or not 
-misc_arg.add_argument('--preprocessing_list', nargs='+',default=  ['normalize']) # set default = [None] to do nothing 
+misc_arg.add_argument('--preprocessing_list', nargs='+',default= [None]) # ['flip_horizontal','normalize', 'pad_crop']) # set default = [None] to do nothing 
 
 # Question 2.1 
 misc_arg.add_argument('--cnn_model', type=str, default='quick_cnn')

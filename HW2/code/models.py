@@ -3,7 +3,7 @@ from layers import *
 
 def quick_cnn(x, labels, c_num, batch_size, is_train, reuse, make_grad_vanish=False, resolve_grad_vanish=False):
   with tf.variable_scope('C', reuse=reuse) as vs:
-
+    print '...quick_cnn: x shape: ', x.get_shape().as_list()
     # conv1
     with tf.variable_scope('conv1', reuse=reuse):
       hidden_num = 32 
@@ -30,7 +30,8 @@ def quick_cnn(x, labels, c_num, batch_size, is_train, reuse, make_grad_vanish=Fa
     #  x = tf.nn.dropout(x, keep_prob=0.5)
     # fc4
     with tf.variable_scope('conv4', reuse=reuse):
-      x = tf.reshape(x, [batch_size, -1])
+      x = tf.contrib.layers.flatten(x)
+      print '...quick_cnn: x shape: ', x.get_shape().as_list()
       x = fc_factory(x, hidden_num, is_train, reuse)
     feat = x
 
@@ -47,13 +48,18 @@ def quick_cnn(x, labels, c_num, batch_size, is_train, reuse, make_grad_vanish=Fa
     # Softmax
     with tf.variable_scope('sm', reuse=reuse):
       probs = tf.nn.softmax(logits=x, name='softmax')
+ 
       confidence = tf.reduce_max(tf.one_hot(labels, c_num)*probs, reduction_indices=[1])
+ 
+      # hot_labels = tf.one_hot(labels, c_num) 
+      # confidence = hot_labels*probs
+
       loss = tf.nn.softmax_cross_entropy_with_logits(logits=x, labels=tf.one_hot(labels, c_num))
       accuracy = tf.reduce_mean(tf.to_float(tf.equal(tf.argmax(x, axis=1), labels)))
   print 'shape of confidence', confidence.get_shape() 
   print  'shape of probs:', probs.get_shape().as_list() 
   variables = tf.contrib.framework.get_variables(vs)
-  return loss, feat, accuracy, variables, confidence 
+  return loss, feat, accuracy, variables, probs 
 
 
 def customized_cnn(x, labels, c_num, batch_size, is_train, reuse, make_grad_vanish=False, resolve_grad_vanish=False):

@@ -14,7 +14,8 @@ def denorm_img(img):
   return (img + 1.) * 127.5
 
 # def flip_flip(img):
-
+os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 class Trainer(object):
   def __init__(self, config, data_loader, label_loader, test_data_loader, test_label_loader):
@@ -77,74 +78,81 @@ class Trainer(object):
 
     gpu_options = tf.GPUOptions(allow_growth=True)
     sess_config = tf.ConfigProto(allow_soft_placement=True,
-                                 gpu_options=gpu_options)
+                                 gpu_options=gpu_options, device_count={'GPU':1})
 
     self.sess = sv.prepare_or_wait_for_session(config=sess_config)
 
   def train(self):
     training_log_set = np.zeros([self.max_step - self.start_step,6], dtype=np.float32)
     save_test_accuracy = 0 
-    for step in trange(self.start_step, self.max_step):
-      fetch_dict = {
-        'c_optim': self.c_optim,
-        'wd_optim': self.wd_optim,
-        'c_loss': self.c_loss,
-        'accuracy': self.accuracy,
-        'lr': self.lr,
-        'conv1_grad': self.conv1_grad,
-        'conv4_grad': self.conv4_grad }
-
-      if step % self.log_step == self.log_step - 1:
-        fetch_dict.update({
+    try: 
+      for step in trange(self.start_step, self.max_step):
+        if step > 1999:
+          break 
+        fetch_dict = {
           'c_optim': self.c_optim,
           'wd_optim': self.wd_optim,
           'c_loss': self.c_loss,
-          'accuracy': self.accuracy, 
+          'accuracy': self.accuracy,
           'lr': self.lr,
           'conv1_grad': self.conv1_grad,
-          'conv4_grad': self.conv4_grad, 
-          'summary': self.summary_op })
+          'conv4_grad': self.conv4_grad }
 
-      result = self.sess.run(fetch_dict)
-      lr = result['lr']
-      c_loss = result['c_loss']
-      accuracy = result['accuracy']
-      conv1_grad = result['conv1_grad']
-      conv4_grad = result['conv4_grad']
-      training_log_set[step] = [lr, c_loss, accuracy, conv1_grad, conv4_grad, save_test_accuracy]
+        if step % self.log_step == self.log_step - 1:
+          fetch_dict.update({
+            'c_optim': self.c_optim,
+            'wd_optim': self.wd_optim,
+            'c_loss': self.c_loss,
+            'accuracy': self.accuracy, 
+            'lr': self.lr,
+            'conv1_grad': self.conv1_grad,
+            'conv4_grad': self.conv4_grad, 
+            'summary': self.summary_op })
 
-      if step % self.log_step == self.log_step - 1:
-        self.summary_writer.add_summary(result['summary'], step)
-        self.summary_writer.flush()
+        result = self.sess.run(fetch_dict)
+        lr = result['lr']
+        c_loss = result['c_loss']
+        accuracy = result['accuracy']
+        conv1_grad = result['conv1_grad']
+        conv4_grad = result['conv4_grad']
+        training_log_set[step] = [lr, c_loss, accuracy, conv1_grad, conv4_grad, save_test_accuracy]
 
-        # lr = result['lr']
-        # c_loss = result['c_loss']
-        # accuracy = result['accuracy']
+        if step % self.log_step == self.log_step - 1:
+          self.summary_writer.add_summary(result['summary'], step)
+          self.summary_writer.flush()
 
-        print("\n[{}/{}:{:.6f}] Loss_C: {:.6f} Accuracy: {:.4f} conv1_grad: {:.6f} conv4_grad: {:.6f}" . \
-              format(step, self.max_step, lr, c_loss, accuracy, conv1_grad, conv4_grad ))
-        sys.stdout.flush()
+          # lr = result['lr']
+          # c_loss = result['c_loss']
+          # accuracy = result['accuracy']
 
-      if step % self.save_step == self.save_step - 1:
-        self.saver.save(self.sess, self.model_dir + '/model',global_step=step)
-        
-        test_accuracy = 0
-        for iter in xrange(self.test_iter):
-          fetch_dict = { "test_accuracy":self.test_accuracy }
-          result = self.sess.run(fetch_dict)
-          test_accuracy += result['test_accuracy']
-        test_accuracy /= self.test_iter
-        save_test_accuracy = test_accuracy 
+          print("\n[{}/{}:{:.6f}] Loss_C: {:.6f} Accuracy: {:.4f} conv1_grad: {:.6f} conv4_grad: {:.6f}" . \
+                format(step, self.max_step, lr, c_loss, accuracy, conv1_grad, conv4_grad ))
+          sys.stdout.flush()
 
-        print("\n[{}/{}:{:.6f}] Test Accuracy: {:.4f}" . \
-              format(step, self.max_step, lr, test_accuracy))
-        sys.stdout.flush()
+        if step % self.save_step == self.save_step - 1:
+          self.saver.save(self.sess, self.model_dir + '/model',global_step=step)
+          
+          test_accuracy = 0
+          for iter in xrange(self.test_iter):
+            fetch_dict = { "test_accuracy":self.test_accuracy }
+            result = self.sess.run(fetch_dict)
+            test_accuracy += result['test_accuracy']
+          test_accuracy /= self.test_iter
+          save_test_accuracy = test_accuracy 
+
+          print("\n[{}/{}:{:.6f}] Test Accuracy: {:.4f}" . \
+                format(step, self.max_step, lr, test_accuracy))
+          sys.stdout.flush()
 
 
-      if step % self.epoch_step == self.epoch_step - 1:
-        self.sess.run([self.lr_update])
+        if step % self.epoch_step == self.epoch_step - 1:
+          self.sess.run([self.lr_update])
+    except KeyboardInterrupt:
+      print("Control C pressed. Saving model before exit. ")
+      print("Latest model saved in files: %s" % self.model_dir + '/model')
+      pass 
     self.saver.save(self.sess, self.model_dir + '/model', global_step=step)
-    return training_log_set
+    return training_log_set[0:step,...]
 
   def build_model(self):
     self.x = self.data_loader
