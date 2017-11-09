@@ -24,16 +24,21 @@ parser.add_argument('--min_lr', default=1e-4, type=float, help='Min of learning 
 parser.add_argument('--max_epoches', default=20, type=int, help='Max number of epoches')
 parser.add_argument('--GPU', default=1, type=int, help='GPU core')
 parser.add_argument('--use_GPU', default='true', type=str2bool, help='Use GPU or not')
-parser.add_argument('--model', default='/home/tynguyen/cis680/logs/HW3/part1/mobilenet', type=str, help='Model path')
+parser.add_argument('--model', default='/home/tynguyen/cis680/logs/HW3/part1/', type=str, help='Model path')
 parser.add_argument('--data_path', default='/home/tynguyen/cis680/data/cifar10', type=str, help='Data path')
 parser.add_argument('--resume', default='false', type=str2bool, help='resume from checkpoint')
 parser.add_argument('--visual', default='false', type=str2bool, help='Display images')
 parser.add_argument('--optim', default='adam', type=str, help='Type of optimizer', choices=['adam', 'sgd'])
+parser.add_argument('--net', default='convnet', type=str, help='Type of nets', choices=['convnet', 'mobilenet', 'resnet'])
 args = parser.parse_args()
 use_cuda = False 
 if args.use_GPU:
   use_cuda = torch.cuda.is_available()
 #use_cuda = False 
+
+
+# Logfile
+args.model = os.path.join(args.model, args.net) 
 
 if use_cuda:
   torch.cuda.set_device(args.GPU) # set GPU that we want to use 
@@ -104,8 +109,12 @@ else:
     # net = ShuffleNetG2()
     # net = SENet18()
     # CIS 680 options 
-    #net = ConvNet() # Part 1.1 
-    net = MobileNet680() # Part 1.2  
+    if args.net == 'convnet':
+      net = ConvNet() # Part 1.1 
+    elif args.net == 'mobilenet':
+      net = MobileNet680() # Part 1.2  
+    elif args.net == 'resnet':
+      net = ResNet680() # Part 1.3  
 if use_cuda:
   net.cuda() 
   #net.torch.nn.DataParallel(net, device_ids=range(torch.cuda.device_count()))

@@ -37,7 +37,7 @@ class MobileNet680(nn.Module):
   def __init__(self):
     super(MobileNet680, self).__init__() 
     self.features = self._make_layers(cfg) 
-    self.classifier = None 
+    self.classifier = nn.Linear(512,10) 
   
   def forward(self, x):
     out = self.features(x) 

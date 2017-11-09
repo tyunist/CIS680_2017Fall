@@ -21,13 +21,13 @@ class ConvNet(nn.Module):
   def __init__(self):
     super(ConvNet, self).__init__() 
     self.features = self._make_layers(cfg) 
-    self.classifier = None 
+    self.classifier = nn.Linear(512, 10)  
   
   def forward(self, x):
     out = self.features(x) 
-    out = torch.squeeze(out)
+    #out = torch.squeeze(out)
+    out = out.view(out.size(0), -1)
     print('===> Conv Out size:', out.size())
-    #out = out.view(out.size(0), -1)
     #out = F.dropout(out, training=self.training) 
     if self.classifier:
       out = self.classifier(out)

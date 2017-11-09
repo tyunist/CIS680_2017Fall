@@ -12,3 +12,4 @@ from .preact_resnet import *
 # CIS 680 nets 
 from .convnet_cis680 import * 
 from .mobilenet_cis680 import * 
+from .resnet_cis680 import * 
