@@ -25,11 +25,11 @@ parser.add_argument('--max_epoches', default=20, type=int, help='Max number of e
 parser.add_argument('--GPU', default=1, type=int, help='GPU core')
 parser.add_argument('--use_GPU', default='true', type=str2bool, help='Use GPU or not')
 parser.add_argument('--model', default='/home/tynguyen/cis680/logs/HW3/part1/', type=str, help='Model path')
-parser.add_argument('--data_path', default='/home/tynguyen/cis680/data/cifar10', type=str, help='Data path')
+parser.add_argument('--data_path', default='/home/tynguyen/cis680/data/cifar10_transformed', type=str, help='Data path')
 parser.add_argument('--resume', default='false', type=str2bool, help='resume from checkpoint')
 parser.add_argument('--visual', default='false', type=str2bool, help='Display images')
 parser.add_argument('--optim', default='adam', type=str, help='Type of optimizer', choices=['adam', 'sgd'])
-parser.add_argument('--net', default='convnet', type=str, help='Type of nets', choices=['convnet', 'mobilenet', 'resnet'])
+parser.add_argument('--net', default='convnet', type=str, help='Type of nets', choices=['convnet', 'mobilenet', 'resnet', 'fasterrcnnnet'])
 args = parser.parse_args()
 use_cuda = False 
 if args.use_GPU:
@@ -51,34 +51,24 @@ print('===> Preparing data....')
 
 data_path = args.data_path 
 
-# First, download the data 
-#rawData_prepare = rawData_prepare(data_path)
-#mean, std = rawData_prepare.download_tar(data_path)
 
 
 param = {} 
-#param['mean'] = (125.92819585, 123.48458521, 114.44250273)  
-#param['std']  = ( 63.02008937,   62.1541447,  66.83732566)  
 
-param['mean'] = (0.4914, 0.4822, 0.4465)
-param['std'] =  (0.247, 0.243, 0.261)
 
 param['data_path'] = os.path.join(data_path, 'imgs')  
 param['label_path'] = os.path.join(data_path, 'train.txt') 
+param['mask_path'] = os.path.join(data_path, 'masks') 
 
-rescale = Rescale((32,32)) 
-fliphorizontal = RandomFlipHorizontal() 
-normalize = Normalize(param['mean'], param['std']) 
-randomcrop = RandomCrop(32, 4) 
-toTensor = ToTensor() 
+toTensor = Cifar10_transformed_ToTensor() 
 
-composed = transforms.Compose([rescale,fliphorizontal, normalize,randomcrop , toTensor])
-trainset = dataloader_obj(param, composed)
+composed = transforms.Compose([toTensor])
+trainset = cifar10_transformed_loader_obj(param, composed)
 trainloader = torch.utils.data.DataLoader(trainset, batch_size=100, shuffle=True, num_workers=1) 
 
 
 param['label_path'] = os.path.join(data_path, 'test.txt') 
-testset = dataloader_obj(param, composed ) 
+testset = cifar10_transformed_loader_obj(param, composed)
 testloader = torch.utils.data.DataLoader(testset, batch_size=100, shuffle=False, num_workers=2)
 
 classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
@@ -114,14 +104,17 @@ else:
       net = MobileNet680() # Part 1.2  
     elif args.net == 'resnet':
       net = ResNet680() # Part 1.3  
+    elif args.net == 'basenet':
+      net = BaseNet680()
+    elif args.net == 'fasterrcnnnet':
+      net = Faster_RCNN_net680() 
+
 if use_cuda:
   net.cuda() 
   #net.torch.nn.DataParallel(net, device_ids=range(torch.cuda.device_count()))
   cudnn.benchmark = True 
 
 
-# Loss function 
-criterion = nn.CrossEntropyLoss() 
 
 # Optimizer 
 # Find learning rate decay factor 
@@ -149,7 +142,7 @@ def train(epoch, max_iter=None, lr=0, visual=False):
   total = 0
   num_iter = 0  
   for batch_idx, sample_batched in enumerate(trainloader):
-    print(batch_idx, sample_batched['image'].size(), sample_batched['label'].view(-1).size()) 
+    print(batch_idx, sample_batched['image'].size(), sample_batched['label'].view(-1).size(), sample_batched['mask'].view(-1).size() ) 
     if batch_idx == 0 and visual==True:
       plt.figure() 
       batch_display(sample_batched)
@@ -157,27 +150,36 @@ def train(epoch, max_iter=None, lr=0, visual=False):
       plt.show() 
     inputs = sample_batched['image']
     targets = sample_batched['label']
+    masks = sample_batched['mask']
+    # Reshape masks to (n x 36, ) 
+    masks = masks.view(-1) 
+    # Create a mask to ignore all 2-elements (white in the mask)
+    value_filter = masks.le(1).float()  
+    #masks = torch.masked_select(masks, value_filter) 
+    # Loss function for object vs non object  
+    isobject_criterion = nn.BCEWithLogitsLoss(value_filter) 
+  
     if use_cuda:
-      inputs, targets = inputs.cuda(), targets.cuda() 
+      inputs, targets, masks = inputs.cuda(), targets.cuda(), mask.cuda() 
     optimizer.zero_grad() 
-    inputs, targets = Variable(inputs) , Variable(targets.view(-1))
-    outputs = net(inputs)
-    loss  = criterion(outputs, targets)
+    inputs, targets, masks = Variable(inputs) , Variable(targets.view(-1)), Variable(masks)
+    isobject_outputs =  net(inputs)['out'].view(-1) 
+
+    # Filter out based on mask 
+    #isobject_outputs = torch.masked_select(isobject_outputs, value_filter) 
+    loss  = isobject_criterion(isobject_outputs, masks)
     loss.backward() # Computer gradients 
     optimizer.step()  # Update network's parameters 
 
     train_loss += loss.data[0] 
-    _, predicted = torch.max(outputs.data, 1) 
-    total += targets.size(0) 
-    correct += predicted.eq(targets.data).cpu().sum()
     
-    epoch_time = progress_bar(batch_idx, len(trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d) | lr: %.4f'
-          % (train_loss/(batch_idx+1), 100.*correct/total, correct, total, lr))
+    epoch_time = progress_bar(batch_idx, len(trainloader), 'Loss: %.3f | lr: %.4f'
+          % (train_loss/(batch_idx+1),  lr))
     num_iter+= 1 
     
     
     if max_iter and num_iter >= max_iter:
-      break 
+      break   
 
   # Update learning rate after each epoch 
   lr_array.append(lr) 
@@ -192,7 +194,7 @@ def test(epoch, max_batches, visual=False):
   total = 0 
   num_batches = 0 
   for batch_idx, sample_batched in enumerate(testloader):
-    print(batch_idx, sample_batched['image'].size(), sample_batched['label'].view(-1).size()) 
+    print(batch_idx, sample_batched['image'].size(), sample_batched['label'].view(sample_batched.size(0),-1).size()) 
     if batch_idx == 0 and visual==True:
       plt.figure() 
       batch_display(sample_batched)
@@ -200,21 +202,28 @@ def test(epoch, max_batches, visual=False):
       plt.show() 
     inputs = sample_batched['image']
     targets = sample_batched['label']
+    masks = sample_batched['mask']
+    # Reshape masks to (n x 36, ) 
+    masks = masks.view(-1) 
+    # Create a mask to ignore all 2-elements (white in the mask)
+    value_filter = masks.le(1).float() 
+    
     if use_cuda:
-      inputs, targets = inputs.cuda(), targets.cuda() 
+      inputs, targets, masks = inputs.cuda(), targets.cuda(), mask.cuda() 
     optimizer.zero_grad() 
-    inputs, targets = Variable(inputs), Variable(targets.view(-1))
-    outputs = net(inputs)
-    loss  = criterion(outputs, targets)
+    inputs, targets, masks = Variable(inputs) , Variable(targets.view(-1)), Variable(masks)
+    isobject_outputs = net(inputs)['out'].view(-1)  
+    
+    # Loss criterion 
+    isobject_criterion = nn.BCEWithLogitsLoss(value_filter) 
+    # Reshape output 
+    loss  = isobject_criterion(outputs, masks)
     
     test_loss += loss.data[0] 
-    _, predicted = torch.max(outputs.data, 1) 
-    total += targets.size(0) 
-    correct += predicted.eq(targets.data).cpu().sum()
-
-    progress_bar(batch_idx, len(testloader), 'Test Loss: %.3f | Test Acc: %.3f%% (%d/%d)'
-          % (test_loss/(batch_idx+1), 100.*correct/total, correct, total))
-    num_batches += 1 
+    
+    epoch_time = progress_bar(batch_idx, len(trainloader), 'Test Loss: %.3f | lr: %.4f'
+          % (train_loss/(batch_idx+1),  lr))
+    num_iter+= 1 
     if num_batches >= max_batches:
       break 
   # Save checkpoint.

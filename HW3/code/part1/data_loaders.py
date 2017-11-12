@@ -60,12 +60,12 @@ class ToTensor(object):
 
 class Normalize(object):
   """Normalize images"""
+  # NOTE: change image pixels to float before standardization. Otherwise, it does not work! 
   def __init__(self, mean, std):
     self.mean = mean 
     self.std = std 
   def __call__(self, sample):
     image, label = sample['image'], sample['label']
-    
     #image = (image - self.mean)/self.std
     in_channels = len(self.mean) 
     assert len(image.shape) == in_channels, 'ERROR <Normalize>: in_channels must equal len(image.shape)'
@@ -107,7 +107,8 @@ class Rescale(object):
       new_h, new_w = self.output_size
 
     new_h, new_w = int(new_h), int(new_w)
-
+    
+    # This function will scale image by 255. 
     img = transform.resize(image, (new_h, new_w))
     return {'image': img, 'label': label}
 
@@ -115,14 +116,12 @@ class Rescale(object):
 class dataloader_obj(data.Dataset):
   def __init__(self, param, transform=None):
     self.data, self.label = read_labeled_image_list(param['label_path'], param['data_path'])
-    self.mean_val = param['mean'] 
-    self.std = param['std'] 
     self.transform = transform # this can be a compose of transforms 
 
 
   def __getitem__(self, index):
     #img = np.array(Image.open(self.data[index]))[np.newaxis,...]
-    img = io.imread(self.data[index]) 
+    img = io.imread(self.data[index])
     label = np.array([self.label[index]]) 
     #label = self.label[index].astype(np.int) 
     #img = torch.from_numpy(img.astype(np.float32))
