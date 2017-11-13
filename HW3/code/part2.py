@@ -64,12 +64,13 @@ toTensor = Cifar10_transformed_ToTensor()
 
 composed = transforms.Compose([toTensor])
 trainset = cifar10_transformed_loader_obj(param, composed)
-trainloader = torch.utils.data.DataLoader(trainset, batch_size=100, shuffle=True, num_workers=1) 
+BATCH_SIZE = 100
+trainloader = torch.utils.data.DataLoader(trainset, batch_size=BATCH_SIZE, shuffle=True, num_workers=1) 
 
 
 param['label_path'] = os.path.join(data_path, 'test.txt') 
 testset = cifar10_transformed_loader_obj(param, composed)
-testloader = torch.utils.data.DataLoader(testset, batch_size=100, shuffle=False, num_workers=2)
+testloader = torch.utils.data.DataLoader(testset, batch_size=BATCH_SIZE, shuffle=False, num_workers=2)
 
 classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
 
@@ -142,12 +143,14 @@ def train(epoch, max_iter=None, lr=0, visual=False):
   total = 0
   num_iter = 0  
   for batch_idx, sample_batched in enumerate(trainloader):
+    batch_size = sample_batched['image'].size(0) 
     print(batch_idx, sample_batched['image'].size(), sample_batched['label'].view(-1).size(), sample_batched['mask'].view(-1).size() ) 
     if batch_idx == 0 and visual==True:
       plt.figure() 
       batch_display(sample_batched)
       plt.axis('off')
-      plt.show() 
+      plt.show()
+    # Input data  
     inputs = sample_batched['image']
     targets = sample_batched['label']
     masks = sample_batched['mask']
@@ -155,26 +158,30 @@ def train(epoch, max_iter=None, lr=0, visual=False):
     masks = masks.view(-1) 
     # Create a mask to ignore all 2-elements (white in the mask)
     value_filter = masks.le(1).float()  
-    #masks = torch.masked_select(masks, value_filter) 
+    
     # Loss function for object vs non object  
     isobject_criterion = nn.BCEWithLogitsLoss(value_filter) 
   
     if use_cuda:
       inputs, targets, masks = inputs.cuda(), targets.cuda(), mask.cuda() 
+    # Predict output 
     optimizer.zero_grad() 
     inputs, targets, masks = Variable(inputs) , Variable(targets.view(-1)), Variable(masks)
-    isobject_outputs =  net(inputs)['out'].view(-1) 
+    isobject_outputs =  net(inputs)['out'].view(-1) # output: (N x 36, )
+    
+    # Get accuracy 
+    max_outputs, _ = torch.max(isobject_outputs.view(batch_size, -1), 1, keepdim=True) 
+    center_predict = isobject_outputs.view(batch_size, -1).eq(max_outputs)
+    total += batch_size
 
-    # Filter out based on mask 
-    #isobject_outputs = torch.masked_select(isobject_outputs, value_filter) 
+    correct += torch.masked_select(masks.view(batch_size, -1), center_predict).eq(1).float().sum().data.numpy()[0]  
     loss  = isobject_criterion(isobject_outputs, masks)
     loss.backward() # Computer gradients 
     optimizer.step()  # Update network's parameters 
 
     train_loss += loss.data[0] 
-    
-    epoch_time = progress_bar(batch_idx, len(trainloader), 'Loss: %.3f | lr: %.4f'
-          % (train_loss/(batch_idx+1),  lr))
+    epoch_time = progress_bar(batch_idx, len(trainloader), 'Loss: %.3f | Acc: %.3f%% (%d/%d) | lr: %.4f'
+          % (train_loss/(batch_idx+1), 100.*correct/total, correct, total,  lr))
     num_iter+= 1 
     
     
@@ -192,9 +199,11 @@ def test(epoch, max_batches, visual=False):
   test_loss = 0 
   correct = 0 
   total = 0 
-  num_batches = 0 
+  num_batches = 0
+  num_iter = 0  
   for batch_idx, sample_batched in enumerate(testloader):
-    print(batch_idx, sample_batched['image'].size(), sample_batched['label'].view(sample_batched.size(0),-1).size()) 
+    batch_size = sample_batched['image'].size(0) 
+    print(batch_idx, sample_batched['image'].size(), sample_batched['label'].view(-1).size()) 
     if batch_idx == 0 and visual==True:
       plt.figure() 
       batch_display(sample_batched)
@@ -207,6 +216,7 @@ def test(epoch, max_batches, visual=False):
     masks = masks.view(-1) 
     # Create a mask to ignore all 2-elements (white in the mask)
     value_filter = masks.le(1).float() 
+    one_filter = masks.eq(1).float() 
     
     if use_cuda:
       inputs, targets, masks = inputs.cuda(), targets.cuda(), mask.cuda() 
@@ -214,15 +224,22 @@ def test(epoch, max_batches, visual=False):
     inputs, targets, masks = Variable(inputs) , Variable(targets.view(-1)), Variable(masks)
     isobject_outputs = net(inputs)['out'].view(-1)  
     
+    max_outputs, _ = torch.max(isobject_outputs.view(batch_size, -1), 1, keepdim=True) 
+    center_predict = isobject_outputs.view(batch_size, -1).eq(max_outputs)
+    
+    total += float(batch_size)
+    
+    correct += torch.masked_select(masks.view(batch_size, -1), center_predict).eq(1).float().sum().data.numpy()[0]  
+    
     # Loss criterion 
     isobject_criterion = nn.BCEWithLogitsLoss(value_filter) 
     # Reshape output 
-    loss  = isobject_criterion(outputs, masks)
+    loss  = isobject_criterion(isobject_outputs, masks)
     
     test_loss += loss.data[0] 
     
-    epoch_time = progress_bar(batch_idx, len(trainloader), 'Test Loss: %.3f | lr: %.4f'
-          % (train_loss/(batch_idx+1),  lr))
+    epoch_time = progress_bar(batch_idx, len(testloader), 'Test Loss: %.3f | Test Acc: %.3f%% (%d/%d) | lr: %.4f'
+          % (test_loss/(batch_idx+1), 100.*correct/total, correct, total,  lr))
     num_iter+= 1 
     if num_batches >= max_batches:
       break 
