@@ -24,7 +24,7 @@ parser.add_argument('--min_lr', default=1e-4, type=float, help='Min of learning 
 parser.add_argument('--max_epoches', default=20, type=int, help='Max number of epoches')
 parser.add_argument('--GPU', default=1, type=int, help='GPU core')
 parser.add_argument('--use_GPU', default='true', type=str2bool, help='Use GPU or not')
-parser.add_argument('--model', default='/home/tynguyen/cis680/logs/HW3/part1/', type=str, help='Model path')
+parser.add_argument('--model', default='/home/tynguyen/cis680/logs/HW3/part2/', type=str, help='Model path')
 parser.add_argument('--data_path', default='/home/tynguyen/cis680/data/cifar10_transformed', type=str, help='Data path')
 parser.add_argument('--resume', default='false', type=str2bool, help='resume from checkpoint')
 parser.add_argument('--visual', default='false', type=str2bool, help='Display images')
@@ -160,6 +160,7 @@ def train(epoch, max_iter=None, lr=0, visual=False):
     masks = masks.view(-1) 
     # Create a mask to ignore all 2-elements (white in the mask)
     value_filter = masks.le(1).float()  
+      
     
     # Loss function for object vs non object  
     isobject_criterion = nn.BCEWithLogitsLoss(value_filter) 
@@ -167,7 +168,11 @@ def train(epoch, max_iter=None, lr=0, visual=False):
     # Predict output 
     optimizer.zero_grad() 
     inputs, targets, masks = Variable(inputs) , Variable(targets.view(-1)), Variable(masks)
-    isobject_outputs =  net(inputs)['cls']['out'].view(-1) # output: (N x 36, )
+    
+    outputs = net(inputs) 
+    isobject_outputs =  outputs['cls']['out'].view(-1) # output: (N x 36, )
+    reg_outputs = outputs['reg']['out'] # N x 3 x 36 
+  
     
     # Get accuracy 
     max_outputs, _ = torch.max(isobject_outputs.view(batch_size, -1), 1, keepdim=True) 

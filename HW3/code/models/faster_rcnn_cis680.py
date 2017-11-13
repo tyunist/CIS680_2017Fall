@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn 
 import torch.nn.functional as F 
 from torch.autograd import Variable 
-
+import torch.nn.init as init
+import time  
 basenet_cfg = [(5, 5, 32), 
        ('M', 2, 2, 0), 
        (5, 5, 64), 
@@ -15,18 +16,37 @@ class_proposal_cfg = [(3, 3, 256),
                       (1, 1, 1)]
 
 box_regression_cfg = [(1, 1, 3)]
- 
+
+
+def init_weight_params(net, method_name='xavier'):
+  for m in net.modules():
+    if isinstance(m, nn.Conv2d):
+      if method_name == 'xavier':
+        init.xavier_uniform(m.weight.data)
+        if m.bias is not None:  
+          # if bias has only one dimension, just initialize using normal distribution
+          if m.bias.data.ndimension() < 2:
+            m.bias.data.normal_(0,1) 
+          else: 
+            init.xavier_uniform(m.bias.data)
+    if isinstance(m, nn.Linear):
+      if method_name == 'xavier':
+        init.xavier_uniform(nn.weight.data)
+
 class BoxRegressionNet680(nn.Module):
   """Regress the box. 
      Input: features obtained from intermediate layer (256 x d) 
      Output: 4k coordinates"""
   def __init__(self, input_channels=3):
     super(BoxRegressionNet680, self).__init__() 
-    cfg = box_regression_cfg[0] 
-    self.conv = nn.Conv2d(input_channels, cfg[2], kernel_size=(cfg[0], cfg[1]), stride=1, padding=0, bias=True) 
+    self.cfg = box_regression_cfg[0] 
+    self.conv = nn.Conv2d(input_channels, self.cfg[2], kernel_size=(self.cfg[0], self.cfg[1]), stride=1, padding=0, bias=True) 
+    # Initialize bias for convolutional layer 
+    self.conv.bias.data = torch.FloatTensor([24,24,32])
   def forward(self, x):
     self.out_conv = self.conv(x)
-    return {'out': self.out_conv}
+    self.out = self.out_conv.view(self.out_conv.size(0), self.cfg[2], -1) # N x 3 x 36 
+    return {'out': self.out}
 
 class ClassProposalNet680(nn.Module):
   """Input is the features obtained from a CNN (without Fully-connected layers).
@@ -122,7 +142,12 @@ class Faster_RCNN_net680(nn.Module):
     in_channels = basenet_cfg[6][2] 
     self.classnet = ClassProposalNet680(in_channels)
     in_channels = class_proposal_cfg[0][2]
-    self.regressionnet = BoxRegressionNet680(in_channels) 
+    self.regressionnet = BoxRegressionNet680(in_channels)
+    # Initialize weights for classnet and basenet 
+    self.basenet.apply(init_weight_params)  
+    self.classnet.apply(init_weight_params)
+    #self.regressionnet.apply(init_box_regression_params) 
+    
 
   def forward(self, x):
     self.out_basenet = self.basenet(x)['out']
@@ -153,7 +178,11 @@ def test_faster_rcnn_net():
   fasterrcnnnet = Faster_RCNN_net680()
   x = torch.randn(2,3,48,48)
   out = fasterrcnnnet(Variable(x))
-
+  
+  regressionnet = fasterrcnnnet.regressionnet
+  for m in regressionnet.modules():
+    if isinstance(m, nn.Conv2d):
+      print('Bias:', m.bias.data) 
   print('class proposal out size:', out['cls']['out'].size())
   print('intermediate size:', out['cls']['intermediate'].size())
   print('Reg out size:', out['reg']['out'].size())

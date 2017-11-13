@@ -89,6 +89,7 @@ def get_mean_and_std(dataset):
     std.div_(len(dataset))
     return mean, std
 
+    
 def init_params(net):
     '''Init layer parameters.'''
     for m in net.modules():
