@@ -154,6 +154,8 @@ def train(epoch, max_iter=None, lr=0, visual=False):
     inputs = sample_batched['image']
     targets = sample_batched['label']
     masks = sample_batched['mask']
+    if use_cuda:
+      inputs, targets, masks = inputs.cuda(), targets.cuda(), masks.cuda() 
     # Reshape masks to (n x 36, ) 
     masks = masks.view(-1) 
     # Create a mask to ignore all 2-elements (white in the mask)
@@ -162,19 +164,17 @@ def train(epoch, max_iter=None, lr=0, visual=False):
     # Loss function for object vs non object  
     isobject_criterion = nn.BCEWithLogitsLoss(value_filter) 
   
-    if use_cuda:
-      inputs, targets, masks = inputs.cuda(), targets.cuda(), mask.cuda() 
     # Predict output 
     optimizer.zero_grad() 
     inputs, targets, masks = Variable(inputs) , Variable(targets.view(-1)), Variable(masks)
-    isobject_outputs =  net(inputs)['out'].view(-1) # output: (N x 36, )
+    isobject_outputs =  net(inputs)['cls']['out'].view(-1) # output: (N x 36, )
     
     # Get accuracy 
     max_outputs, _ = torch.max(isobject_outputs.view(batch_size, -1), 1, keepdim=True) 
     center_predict = isobject_outputs.view(batch_size, -1).eq(max_outputs)
     total += batch_size
 
-    correct += torch.masked_select(masks.view(batch_size, -1), center_predict).eq(1).float().sum().data.numpy()[0]  
+    correct += torch.masked_select(masks.view(batch_size, -1), center_predict).eq(1).float().cpu().sum().data.numpy()[0]  
     loss  = isobject_criterion(isobject_outputs, masks)
     loss.backward() # Computer gradients 
     optimizer.step()  # Update network's parameters 
@@ -212,24 +212,24 @@ def test(epoch, max_batches, visual=False):
     inputs = sample_batched['image']
     targets = sample_batched['label']
     masks = sample_batched['mask']
+    if use_cuda:
+      inputs, targets, masks = inputs.cuda(), targets.cuda(), masks.cuda() 
     # Reshape masks to (n x 36, ) 
     masks = masks.view(-1) 
     # Create a mask to ignore all 2-elements (white in the mask)
     value_filter = masks.le(1).float() 
     one_filter = masks.eq(1).float() 
     
-    if use_cuda:
-      inputs, targets, masks = inputs.cuda(), targets.cuda(), mask.cuda() 
     optimizer.zero_grad() 
     inputs, targets, masks = Variable(inputs) , Variable(targets.view(-1)), Variable(masks)
-    isobject_outputs = net(inputs)['out'].view(-1)  
+    isobject_outputs = net(inputs)['cls']['out'].view(-1)  
     
     max_outputs, _ = torch.max(isobject_outputs.view(batch_size, -1), 1, keepdim=True) 
     center_predict = isobject_outputs.view(batch_size, -1).eq(max_outputs)
     
     total += float(batch_size)
     
-    correct += torch.masked_select(masks.view(batch_size, -1), center_predict).eq(1).float().sum().data.numpy()[0]  
+    correct += torch.masked_select(masks.view(batch_size, -1), center_predict).eq(1).float().cpu().sum().data.numpy()[0]  
     
     # Loss criterion 
     isobject_criterion = nn.BCEWithLogitsLoss(value_filter) 

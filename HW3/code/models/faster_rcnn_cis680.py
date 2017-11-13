@@ -14,6 +14,20 @@ basenet_cfg = [(5, 5, 32),
 class_proposal_cfg = [(3, 3, 256), 
                       (1, 1, 1)]
 
+box_regression_cfg = [(1, 1, 3)]
+ 
+class BoxRegressionNet680(nn.Module):
+  """Regress the box. 
+     Input: features obtained from intermediate layer (256 x d) 
+     Output: 4k coordinates"""
+  def __init__(self, input_channels=3):
+    super(BoxRegressionNet680, self).__init__() 
+    cfg = box_regression_cfg[0] 
+    self.conv = nn.Conv2d(input_channels, cfg[2], kernel_size=(cfg[0], cfg[1]), stride=1, padding=0, bias=True) 
+  def forward(self, x):
+    self.out_conv = self.conv(x)
+    return {'out': self.out_conv}
+
 class ClassProposalNet680(nn.Module):
   """Input is the features obtained from a CNN (without Fully-connected layers).
      Output: N x (6x6) for given input images and network in cis680 HW3 part 2"""
@@ -36,7 +50,7 @@ class ClassProposalNet680(nn.Module):
     self.out_conv2 = torch.squeeze(self.conv2(self.out_conv1))
     # Reshape to n x 36  
     self.out = self.out_conv2.view(self.out_conv2.size(0),-1)   
-    return {'conv1':self.out_conv1,
+    return {'intermediate':self.out_conv1,
             'conv2':self.out_conv2, 
             'out': self.out_conv2} 
     
@@ -107,10 +121,15 @@ class Faster_RCNN_net680(nn.Module):
     self.basenet = BaseNet680(in_channels)
     in_channels = basenet_cfg[6][2] 
     self.classnet = ClassProposalNet680(in_channels)
+    in_channels = class_proposal_cfg[0][2]
+    self.regressionnet = BoxRegressionNet680(in_channels) 
+
   def forward(self, x):
     self.out_basenet = self.basenet(x)['out']
     self.out_classnet = self.classnet(self.out_basenet)
-    return self.out_classnet 
+    self.out_regressionnet = self.regressionnet(self.out_classnet['intermediate'])     
+    return {'cls':self.out_classnet, 
+            'reg':self.out_regressionnet} 
 
 def test_separate():
   basenet = BaseNet680()
@@ -126,15 +145,18 @@ def test_separate():
  
   out = out['conv4'] 
   out = classnet(out) 
-  print('conv1 size:', out['conv1'].size())
+  print('conv1 size:', out['intermediate'].size())
   print('conv2 size:', out['conv2'].size())
   print('out class size:', out['out'].size())
 
 def test_faster_rcnn_net():
-  basenet = Faster_RCNN_net680()
+  fasterrcnnnet = Faster_RCNN_net680()
   x = torch.randn(2,3,48,48)
-  out = basenet(Variable(x))
-  print('out size:', out['out'].size())
+  out = fasterrcnnnet(Variable(x))
+
+  print('class proposal out size:', out['cls']['out'].size())
+  print('intermediate size:', out['cls']['intermediate'].size())
+  print('Reg out size:', out['reg']['out'].size())
   
 if __name__=="__main__":
   test_faster_rcnn_net() 
