@@ -84,23 +84,17 @@ def map_mask_2_img_coordinates(mask_size=6, scale=8, start=4):
   return indices
 
 
-def get_reg_loss(reg_outputs, boxes, weights):
+def get_reg_loss(reg_outputs, boxes, weights, anchors):
   """Get regression loss
     Inputs: reg_outputs : Variable tensor N x 3 x 36
             boxes:        Variable tensor N x 3 
             weights:      Variable tensor N x 36, where only 1 exists 
-            - at 1 locations in the mask, else is zero"""
+            - at 1 locations in the mask, else is zero
+            anchors:      Variable tensor N x 3"""
   batch_size = reg_outputs.size(0)
-  # Find anchors (x_a, y_a, w_a) N x 3 x 36 
-  mask_indices = map_mask_2_img_coordinates()  # (2 x 36)
-  # TODO: set this value to a proper value
-  w_a = 32 # I think it should be 44 but TA said it is 32 
-  w_a_array = w_a*np.ones(36)
-  mask_indices = np.vstack([mask_indices, w_a_array])
- 
-  anchors = Variable(torch.from_numpy(mask_indices).float()) 
-
-  anchors =  anchors.expand(reg_outputs.size())
+  if anchors.ndimension() < 3:
+    anchors.unsqueeze(2)
+    anchors =  anchors.expand_as(reg_outputs )
 
   # Normalize reg_outputs 
   norm_reg = normalize_reg_outputs(reg_outputs, anchors)

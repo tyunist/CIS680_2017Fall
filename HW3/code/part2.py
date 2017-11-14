@@ -21,8 +21,8 @@ def str2bool(v):
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
 parser.add_argument('--lr', default=1e-3, type=float, help='learning rate')
-parser.add_argument('--min_lr', default=1e-4, type=float, help='Min of learning rate')
-parser.add_argument('--max_epoches', default=1, type=int, help='Max number of epoches')
+parser.add_argument('--min_lr', default=1e-5, type=float, help='Min of learning rate')
+parser.add_argument('--max_epoches', default=20, type=int, help='Max number of epoches')
 parser.add_argument('--GPU', default=1, type=int, help='GPU core')
 parser.add_argument('--use_GPU', default='true', type=str2bool, help='Use GPU or not')
 parser.add_argument('--model', default='/home/tynguyen/cis680/logs/HW3/part2/2.2', type=str, help='Model path')
@@ -126,10 +126,18 @@ if args.optim == 'sgd':
   optimizer  = optim.SGD(net.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4) 
 else:
   optimizer = optim.Adam(net.parameters(), lr=args.lr,weight_decay=0.05)  
-# Training
+
+# Learning rates 
 lr_array = []   
 
-
+# Find anchors (x_a, y_a, w_a) N x 3 x 36 
+mask_indices = utils.map_mask_2_img_coordinates()  # (2 x 36)
+# TODO: set this value to a proper value
+w_a = 32 # I think it should be 44 but TA said it is 32 
+w_a_array = w_a*np.ones(36)
+mask_indices = np.vstack([mask_indices, w_a_array])
+ 
+anchors_tensor = torch.from_numpy(mask_indices).float()
 
 
 def adjust_lr(optimizer, lr_decay_factor):
@@ -155,6 +163,7 @@ def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None
   total = 0
   num_iter = 0  
   dataloader_queue = trainloader if is_train else testloader
+
   for batch_idx, sample_batched in enumerate(dataloader_queue):
     batch_size = sample_batched['image'].size(0) 
     # print(batch_idx, sample_batched['image'].size(), sample_batched['label'].view(-1).size(), sample_batched['mask'].view(-1).size() ) 
@@ -168,8 +177,9 @@ def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None
     targets = sample_batched['label']
     masks = sample_batched['mask']
     boxes = sample_batched['box'].view(batch_size, 3).float()
+    anchors = anchors_tensor
     if use_cuda:
-      inputs, targets, masks, boxes = inputs.cuda(), targets.cuda(), masks.cuda(), boxes.cuda()  
+      inputs, targets, masks, boxes, anchors = inputs.cuda(), targets.cuda(), masks.cuda(), boxes.cuda(), anchors_tensor.cuda()  
     # Reshape masks to (n x 36, ) 
     masks = masks.view(-1) 
     # Create a mask to ignore all 2-elements (white in the mask)
@@ -184,15 +194,16 @@ def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None
     if is_train:
       optimizer.zero_grad() 
     inputs, targets, masks, boxes, one_filter = Variable(inputs) , Variable(targets.view(-1)), Variable(masks), Variable(boxes), Variable(one_filter)
-    
+    anchors = Variable(anchors)
+
     outputs = net(inputs) 
     isobject_outputs =  outputs['cls']['out'].view(-1) # output: (N x 36, )
     reg_outputs = outputs['reg']['out'] # N x 3 x 36
 
     # pdb.set_trace()
   
-    reg_loss = utils.get_reg_loss(reg_outputs, boxes, one_filter) # Sum over minibatch 
-    print('==> Net %s | Type Loss: %s | Reg loss %.3f over %d total boxes'%(args.net, args.loss_type, reg_loss.data[0], one_filter.data.sum()))
+    reg_loss = utils.get_reg_loss(reg_outputs, boxes, one_filter, anchors) # Sum over minibatch 
+    print('==> Net %s | Type Loss: %s | Reg loss %.3f over %d total boxes| '%(args.net, args.loss_type, reg_loss.data[0], one_filter.data.sum()))
     
     
     # Get accuracy 
@@ -221,7 +232,7 @@ def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None
     train_class_loss += class_loss.data[0] 
     train_reg_loss += reg_loss.data[0] 
     train_loss += total_loss.data[0]
-    epoch_time = progress_bar(batch_idx, len(trainloader), 'Is train: %d  | Total Loss: %.3f | Class Loss: %.3f |Reg Loss: %.3f |Acc: %.3f%% | (%d/%d) | lr: %.4f'
+    epoch_time = progress_bar(batch_idx, len(trainloader), 'Is train: %d  | Total Loss: %.3f | Class Loss: %.3f |Reg Loss: %.3f |Acc: %.3f%% | (%d/%d) | lr: %.6f'
           % (int(is_train), train_loss/(batch_idx+1), train_class_loss/(batch_idx+1), train_reg_loss/(batch_idx+1), 100.*correct/total, correct, total,  lr))
     num_iter+= 1 
     
@@ -287,6 +298,7 @@ def run():
   np.savetxt(os.path.join(args.model, 'test_accuracy.txt'), test_acc_array) 
 
   # Plot results 
+  plt.figure(figsize=(12,12))
   plt.subplot(221)
   plt.plot(train_acc_array[:, 2], color='b') 
   plt.plot(test_acc_array[:, 2], color='r')
