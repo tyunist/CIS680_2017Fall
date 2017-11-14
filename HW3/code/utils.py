@@ -11,12 +11,110 @@ import math
 import torch.nn as nn
 import torch.nn.init as init
 from torchvision import transforms, utils
+from torch.autograd import Variable 
+import torch 
 import matplotlib.pyplot as plt 
 import pdb
 import numpy as np
 from skimage.draw import polygon 
 from skimage.transform import resize 
 classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck') 
+
+def get_smooth_L1_loss(delta_t):
+  """delta_t : N x d"""
+  # Get norm
+ 
+  if  isinstance(delta_t, torch.Tensor):
+    delta_t = delta_t.data 
+    norm_delta =  torch.norm(delta_t, 2, dim=1)
+    # The rest is equivalent to the following naive code 
+    # if norm_delta < 1:
+    #   return 0.5*norm_delta
+    # else:
+    #   return norm_delta - 0.5 
+    one_mask = (norm_delta < 1).float() 
+    multi_factor = 1 - torch.mul(one_mask,  torch.FloatTensor([0.5]))  
+    add_factor = torch.mul((1 - one_mask), torch.FloatTensor([-0.5]))
+
+  else:
+    norm_delta = delta_t.norm(p=2,dim=1)
+    one_mask = (norm_delta < 1).float() 
+    multi_factor = 1 -  0.5*one_mask
+    add_factor = -0.5*(1 - one_mask) 
+  
+  return multi_factor*norm_delta + add_factor   
+
+
+
+def normalize_reg_outputs(reg, anchor): 
+  """Normalize regression outputs
+     i.e. tx = (x - x_a)/w_a;   tw = log(w/w_a) 
+     Inputs: Variable tensor reg = N x 3 x 36, tensor anchor = N x 3 x 36 
+     Outputs: N x 3 x 36 tensor"""
+ 
+  if anchor.ndimension() < 2:
+    anchor.view(-1, 1) 
+  if reg.ndimension() < 3:
+    reg = reg.unsqueeze(2)
+    reg = reg.expand_as(anchor)
+  x_normed = torch.div(reg[:,0,:] - anchor[:,0,:], anchor[:,2,:])
+  y_normed = torch.div(reg[:,1,:] - anchor[:,1,:], anchor[:,2,:])
+  w_normed = torch.div(reg[:,2,:],anchor[:,2,:]).log() 
+  
+  # w_normed = w_normed.expand(xy_normed.size(0), 1, xy_normed.size(2))
+  x_normed = x_normed.unsqueeze(1)
+  y_normed = y_normed.unsqueeze(1)
+  w_normed = w_normed.unsqueeze(1)
+  reg = torch.cat((x_normed, y_normed, w_normed ), dim=1)
+
+
+  # reg[:,0:2,:].data.add_(-anchor[:,0:2,:].data)  # Avoid sharing problem 
+  # reg[:,:,:].data.div_(anchor[:,2,:].data)
+  # reg[:,2,:].data.log_()
+  
+  return reg 
+
+def map_mask_2_img_coordinates(mask_size=6, scale=8, start=4):
+  """Map coordidates of a mask_size to (2, 36) tensor"""
+  X , Y = np.meshgrid(range(mask_size), range(mask_size))
+  X = X.reshape(-1)
+  Y = Y.reshape(-1)
+  indices = np.vstack([Y, X])
+  indices = start + scale*indices
+  return indices
+
+
+def get_reg_loss(reg_outputs, boxes, weights):
+  """Get regression loss
+    Inputs: reg_outputs : Variable tensor N x 3 x 36
+            boxes:        Variable tensor N x 3 
+            weights:      Variable tensor N x 36, where only 1 exists 
+            - at 1 locations in the mask, else is zero"""
+  batch_size = reg_outputs.size(0)
+  # Find anchors (x_a, y_a, w_a) N x 3 x 36 
+  mask_indices = map_mask_2_img_coordinates()  # (2 x 36)
+  w_a = 44 
+  w_a_array = w_a*np.ones(36)
+  mask_indices = np.vstack([mask_indices, w_a_array])
+ 
+  anchors = Variable(torch.from_numpy(mask_indices).float()) 
+
+  anchors =  anchors.expand(reg_outputs.size())
+
+  # Normalize reg_outputs 
+  norm_reg = normalize_reg_outputs(reg_outputs, anchors)
+  # Normalize gt 
+  norm_gt = normalize_reg_outputs(boxes, anchors)
+  
+  # Obtain Smooth L1 loss
+  reg_loss = get_smooth_L1_loss(norm_reg - norm_gt)  
+ 
+  if (batch_size*weights).data.sum() < 1e-8:
+    reg_loss = 0 
+  else:
+    # reg_loss =  (reg_loss * weights).sum()/(batch_size*weights.sum())
+    reg_loss =  (reg_loss * weights).sum()/(weights.sum())
+  return reg_loss
 
 def draw_rectangle(box, img):
   img_size = img.shape[0] 
@@ -187,3 +285,28 @@ def format_time(seconds):
     if f == '':
         f = '0ms'
     return f
+import pdb 
+
+def test_get_smooth_L1_loss():
+  x = torch.linspace(-10, 10, steps=5).view(-1,1)
+  pdb.set_trace()
+  num_elements = x.numel()
+  y = 2*torch.ones(num_elements).view(-1,1)
+  X = torch.cat((x,y), dim=1)
+ 
+  # values = [] 
+    
+  # for i in range(num_elements):
+  #   values.extend([get_smooth_L1_loss(X[i,:])]) 
+
+  x = [v[0] for v in x.numpy()]
+  values = get_smooth_L1_loss(X).numpy()
+  plt.plot(x, values)
+  plt.show()
+
+def test_map_mask_2_img_coordinates():
+  a = map_mask_2_img_coordinates()
+
+if __name__ == "__main__":
+  test_get_smooth_L1_loss()
+  # test_map_mask_2_img_coordinates()

@@ -54,7 +54,7 @@ class cifar10_transformed_loader_obj(data.Dataset):
     return self.data.shape[0] 
 
 
-def read_cifar10_transformed_list(img_list_path, img_dir, mask_dir, image_size=48):
+def read_cifar10_transformed_list(img_list_path, img_dir, mask_dir, image_size=48, norm_box=False):
   """Reads a .txt file containing pathes and labeles
   Args:
     img_list_path: a .txt file with one /path/to/image with one label per line
@@ -63,6 +63,8 @@ def read_cifar10_transformed_list(img_list_path, img_dir, mask_dir, image_size=4
   Returns:
     List with all filenames
   """
+  if norm_box == False:
+    image_size = 1 
   f = open(img_list_path, 'r')
   img_paths = []
   labs = []
