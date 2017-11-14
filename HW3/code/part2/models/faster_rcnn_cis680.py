@@ -29,16 +29,16 @@ def init_weight_params(net, method_name='xavier'):
   for m in net.modules():
     if isinstance(m, nn.Conv2d):
       if method_name == 'xavier':
-        init.xavier_uniform(m.weight.data)
+        init.xavier_normal(m.weight.data)
         if m.bias is not None:  
           # if bias has only one dimension, just initialize using normal distribution
           if m.bias.data.ndimension() < 2:
-            m.bias.data.normal_(0,1) 
+            m.bias.data.normal_(0,0.1) 
           else: 
             init.xavier_uniform(m.bias.data)
     if isinstance(m, nn.Linear):
       if method_name == 'xavier':
-        init.xavier_uniform(nn.weight.data)
+        init.xavier_normal(nn.weight.data)
 
 class BoxRegressionNet680(nn.Module):
   """Regress the box. 

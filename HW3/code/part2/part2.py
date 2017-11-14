@@ -21,11 +21,11 @@ def str2bool(v):
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
 parser.add_argument('--lr', default=1e-3, type=float, help='learning rate')
-parser.add_argument('--min_lr', default=1e-5, type=float, help='Min of learning rate')
+parser.add_argument('--min_lr', default=1e-4, type=float, help='Min of learning rate')
 parser.add_argument('--max_epoches', default=20, type=int, help='Max number of epoches')
 parser.add_argument('--GPU', default=1, type=int, help='GPU core')
 parser.add_argument('--use_GPU', default='true', type=str2bool, help='Use GPU or not')
-parser.add_argument('--model', default='/home/tynguyen/cis680/logs/HW3/part2/2.2', type=str, help='Model path')
+parser.add_argument('--model', default='/home/tynguyen/cis680/logs/HW3/part2/2.1', type=str, help='Model path')
 parser.add_argument('--data_path', default='/home/tynguyen/cis680/data/cifar10_transformed', type=str, help='Data path')
 parser.add_argument('--resume', default='false', type=str2bool, help='resume from checkpoint')
 parser.add_argument('--visual', default='false', type=str2bool, help='Display images')
@@ -180,24 +180,26 @@ def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None
     anchors = anchors_tensor
     if use_cuda:
       inputs, targets, masks, boxes, anchors = inputs.cuda(), targets.cuda(), masks.cuda(), boxes.cuda(), anchors_tensor.cuda()  
-    # Reshape masks to (n x 36, ) 
-    masks = masks.view(-1) 
+    # Reshape masks to (N x 36) 
+    masks = masks.view(batch_size,-1) 
     # Create a mask to ignore all 2-elements (white in the mask)
-    value_filter = masks.le(1).float() 
+    neq_two_filter = masks.le(1).float()  # N x 36 
     one_filter = (masks == 1).float()
+    zero_filter = (masks == 0).float()
       
     
     # Loss function for object vs non object  
-    isobject_criterion = nn.BCEWithLogitsLoss(value_filter) 
+    isobject_criterion = nn.BCEWithLogitsLoss(neq_two_filter) 
   
     # Predict output 
     if is_train:
       optimizer.zero_grad() 
-    inputs, targets, masks, boxes, one_filter = Variable(inputs) , Variable(targets.view(-1)), Variable(masks), Variable(boxes), Variable(one_filter)
+    inputs, targets, masks, boxes = Variable(inputs) , Variable(targets.view(-1)), Variable(masks), Variable(boxes)
     anchors = Variable(anchors)
-
+    one_filter, zero_filter = Variable(one_filter), Variable(zero_filter)
+    
     outputs = net(inputs) 
-    isobject_outputs =  outputs['cls']['out'].view(-1) # output: (N x 36, )
+    isobject_outputs =  outputs['cls']['out'].view(batch_size, -1) # output: (N x 36)
     reg_outputs = outputs['reg']['out'] # N x 3 x 36
 
     # pdb.set_trace()
@@ -207,14 +209,22 @@ def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None
     
     
     # Get accuracy 
-    max_outputs, _ = torch.max(isobject_outputs.view(batch_size, -1), 1, keepdim=True) 
-    center_predict = isobject_outputs.view(batch_size, -1).eq(max_outputs)
-    total += batch_size
+    #max_outputs, _ = torch.max(isobject_outputs, 1, keepdim=True) 
+    #center_predict = isobject_outputs.eq(max_outputs)
+    #total += batch_size
 
-    correct += torch.masked_select(masks.view(batch_size, -1), center_predict).eq(1).float().cpu().sum().data.numpy()[0]  
+    #correct += torch.masked_select(masks.view(, center_predict).eq(1).float().cpu().sum().data.numpy()[0]  
     
- 
-    class_loss  = isobject_criterion(isobject_outputs, masks) # evarage over minibatch 
+    # Get accuracy 
+    pos_thresh, neg_thresh = 0.75, 0.25
+    total += batch_size
+    sigmoided_isobject_outputs = torch.sigmoid(isobject_outputs)
+    pos_pred = (sigmoided_isobject_outputs >= pos_thresh).float()
+    neg_pred = (sigmoided_isobject_outputs <= neg_thresh).float() 
+    correct += (pos_pred * one_filter).sum().data.numpy()[0] + (neg_pred * zero_filter).sum().data.numpy()[0]
+    total   +=  one_filter.sum().data.numpy()[0] + zero_filter.sum().data.numpy()[0]
+    #print('Correct:', correct, 'total:', total)  
+    class_loss  = isobject_criterion(isobject_outputs.view(-1), masks.view(-1)) # evarage over minibatch 
 
     # test only reg_loss
     use_loss_type  = args.loss_type  

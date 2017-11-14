@@ -105,7 +105,10 @@ def get_reg_loss(reg_outputs, boxes, weights, anchors):
   reg_loss = get_smooth_L1_loss(norm_reg - norm_gt)  
  
   if (batch_size*weights).data.sum() < 1e-8:
-    reg_loss = 0 
+    reg_loss = reg_loss.sum()*0
+    print('===> Reg loss = 0 since there is no box') 
+    time.sleep(2)
+ 
   else:
     # reg_loss =  (reg_loss * weights).sum()/(batch_size*weights.sum())
     reg_loss =  (reg_loss * weights).sum()/(weights.sum())
