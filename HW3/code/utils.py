@@ -93,7 +93,8 @@ def get_reg_loss(reg_outputs, boxes, weights):
   batch_size = reg_outputs.size(0)
   # Find anchors (x_a, y_a, w_a) N x 3 x 36 
   mask_indices = map_mask_2_img_coordinates()  # (2 x 36)
-  w_a = 44 
+  # TODO: set this value to a proper value
+  w_a = 32 # I think it should be 44 but TA said it is 32 
   w_a_array = w_a*np.ones(36)
   mask_indices = np.vstack([mask_indices, w_a_array])
  

@@ -22,7 +22,7 @@ def str2bool(v):
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
 parser.add_argument('--lr', default=1e-3, type=float, help='learning rate')
 parser.add_argument('--min_lr', default=1e-4, type=float, help='Min of learning rate')
-parser.add_argument('--max_epoches', default=20, type=int, help='Max number of epoches')
+parser.add_argument('--max_epoches', default=1, type=int, help='Max number of epoches')
 parser.add_argument('--GPU', default=1, type=int, help='GPU core')
 parser.add_argument('--use_GPU', default='true', type=str2bool, help='Use GPU or not')
 parser.add_argument('--model', default='/home/tynguyen/cis680/logs/HW3/part2/2.2', type=str, help='Model path')
@@ -31,6 +31,7 @@ parser.add_argument('--resume', default='false', type=str2bool, help='resume fro
 parser.add_argument('--visual', default='false', type=str2bool, help='Display images')
 parser.add_argument('--optim', default='adam', type=str, help='Type of optimizer', choices=['adam', 'sgd'])
 parser.add_argument('--net', default='convnet', type=str, help='Type of nets', choices=['convnet', 'mobilenet', 'resnet', 'fasterrcnnnet'])
+parser.add_argument('--loss_type', default='total', type=str, help='Type of loss functions', choices=['total','cls', 'reg'])
 args = parser.parse_args()
 use_cuda = False 
 if args.use_GPU:
@@ -128,6 +129,9 @@ else:
 # Training
 lr_array = []   
 
+
+
+
 def adjust_lr(optimizer, lr_decay_factor):
   for param_group in optimizer.param_groups:
     cur_lr = param_group['lr']
@@ -136,9 +140,13 @@ def adjust_lr(optimizer, lr_decay_factor):
   print('===> cur_lr %.5f, updated lr %.5f, decay factor %.4f'%(cur_lr, lr, lr_decay_factor))
   return lr 
  
-def train(epoch, max_iter=None, lr=0, visual=False):
+def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None):
   print('\nEpoch: %d' % epoch)
-  net.train() 
+  if is_train:
+    net.train() 
+  else:
+    net.eval()
+
   train_loss = 0 
   train_class_loss = 0 
   train_reg_loss = 0 
@@ -146,7 +154,8 @@ def train(epoch, max_iter=None, lr=0, visual=False):
   correct = 0 
   total = 0
   num_iter = 0  
-  for batch_idx, sample_batched in enumerate(trainloader):
+  dataloader_queue = trainloader if is_train else testloader
+  for batch_idx, sample_batched in enumerate(dataloader_queue):
     batch_size = sample_batched['image'].size(0) 
     # print(batch_idx, sample_batched['image'].size(), sample_batched['label'].view(-1).size(), sample_batched['mask'].view(-1).size() ) 
     if batch_idx == 0 and visual==True:
@@ -172,7 +181,8 @@ def train(epoch, max_iter=None, lr=0, visual=False):
     isobject_criterion = nn.BCEWithLogitsLoss(value_filter) 
   
     # Predict output 
-    optimizer.zero_grad() 
+    if is_train:
+      optimizer.zero_grad() 
     inputs, targets, masks, boxes, one_filter = Variable(inputs) , Variable(targets.view(-1)), Variable(masks), Variable(boxes), Variable(one_filter)
     
     outputs = net(inputs) 
@@ -181,9 +191,9 @@ def train(epoch, max_iter=None, lr=0, visual=False):
 
     # pdb.set_trace()
   
-    reg_loss = utils.get_reg_loss(reg_outputs, boxes, one_filter)
-    print('==> Reg loss %.3f over %d total boxes'%(reg_loss.data[0], one_filter.data.sum()))
-    time.sleep(2)
+    reg_loss = utils.get_reg_loss(reg_outputs, boxes, one_filter) # Sum over minibatch 
+    print('==> Net %s | Type Loss: %s | Reg loss %.3f over %d total boxes'%(args.net, args.loss_type, reg_loss.data[0], one_filter.data.sum()))
+    
     
     # Get accuracy 
     max_outputs, _ = torch.max(isobject_outputs.view(batch_size, -1), 1, keepdim=True) 
@@ -193,149 +203,130 @@ def train(epoch, max_iter=None, lr=0, visual=False):
     correct += torch.masked_select(masks.view(batch_size, -1), center_predict).eq(1).float().cpu().sum().data.numpy()[0]  
     
  
-    class_loss  = isobject_criterion(isobject_outputs, masks)
+    class_loss  = isobject_criterion(isobject_outputs, masks) # evarage over minibatch 
 
     # test only reg_loss
-    test_only_reg_loss = True 
-    if test_only_reg_loss:
-      total_loss = reg_loss  
+    use_loss_type  = args.loss_type  
+    if use_loss_type == 'cls':
+      total_loss = class_loss
+    elif use_loss_type == 'reg':
+      total_loss = reg_loss 
     else:
-      total_loss = reg_loss + class_loss  
-    total_loss.backward() # Computer gradients 
-    optimizer.step()  # Update network's parameters 
+      total_loss = reg_loss + class_loss   # multiply 10 to make regression run faster
+    
+    if is_train:
+      total_loss.backward() # Computer gradients 
+      optimizer.step()  # Update network's parameters 
 
     train_class_loss += class_loss.data[0] 
     train_reg_loss += reg_loss.data[0] 
-    train_loss = total_loss.data[0]
-    epoch_time = progress_bar(batch_idx, len(trainloader), 'Total Loss: %.3f | Class Loss: %.3f |Reg Loss: %.3f |Acc: %.3f%% | (%d/%d) | lr: %.4f'
-          % (train_loss/(batch_idx+1), train_class_loss/(batch_idx+1), train_reg_loss/(batch_idx+1), 100.*correct/total, correct, total,  lr))
+    train_loss += total_loss.data[0]
+    epoch_time = progress_bar(batch_idx, len(trainloader), 'Is train: %d  | Total Loss: %.3f | Class Loss: %.3f |Reg Loss: %.3f |Acc: %.3f%% | (%d/%d) | lr: %.4f'
+          % (int(is_train), train_loss/(batch_idx+1), train_class_loss/(batch_idx+1), train_reg_loss/(batch_idx+1), 100.*correct/total, correct, total,  lr))
     num_iter+= 1 
     
     
     if max_iter and num_iter >= max_iter:
       break   
 
+  # Save checkpoint.
+  if not is_train:
+    acc = 100.*correct/total
+    if acc > best_acc:
+        print('Saving..')
+        state = {
+            'net': net, #net.module if use_cuda else net,
+            'acc': acc,
+            'epoch': epoch, 
+        }
+        if not os.path.exists(args.model):
+            os.makedirs(args.model, exist_ok=True) # exist_ok: allows recursive (mkdir -p) 
+        torch.save(state, os.path.join(args.model,'ckpt.t7') )
+        best_acc = acc
+
   # Update learning rate after each epoch 
   lr_array.append(lr) 
   lr = adjust_lr(optimizer, lr_decay_f) 
-  return lr, epoch_time, 100.*correct/total  
+  return lr, epoch_time, 100.*correct/total, train_loss/(batch_idx+1), train_class_loss/(batch_idx+1), train_reg_loss/(batch_idx+1), best_acc
 
-def test(epoch, max_batches, visual=False):
-  global best_acc 
-  net.eval() 
-  test_loss = 0 
-  correct = 0 
-  total = 0 
-  num_batches = 0
-  num_iter = 0  
-  for batch_idx, sample_batched in enumerate(testloader):
-    batch_size = sample_batched['image'].size(0) 
-    print(batch_idx, sample_batched['image'].size(), sample_batched['label'].view(-1).size()) 
-    if batch_idx == 0 and visual==True:
-      plt.figure() 
-      batch_display(sample_batched)
-      plt.axis('off')
-      plt.show() 
-    inputs = sample_batched['image']
-    targets = sample_batched['label']
-    masks = sample_batched['mask']
-    if use_cuda:
-      inputs, targets, masks = inputs.cuda(), targets.cuda(), masks.cuda() 
-    # Reshape masks to (n x 36, ) 
-    masks = masks.view(-1) 
-    # Create a mask to ignore all 2-elements (white in the mask)
-    value_filter = masks.le(1).float() 
-    one_filter = masks.eq(1).float() 
+ 
+def run():
+  lr = args.lr # Initial learning rate 
+  training_time = 0 
+  epoch_time = 0 
+
+  # Two big arrays to log results 
+  train_acc_array = [] 
+  test_acc_array = [] 
+  best_acc = 0 
+
+  for epoch in range(start_epoch, start_epoch+args.max_epoches):
+    lr, epoch_time, train_acc, train_loss, train_class_loss, train_reg_loss, _ = train(epoch, 100, lr, args.visual)
+    training_time += epoch_time 
+    if epoch == args.max_epoches-1:
+      max_batches = 100
+    else: 
+      max_batches = 2 
     
-    optimizer.zero_grad() 
-    inputs, targets, masks = Variable(inputs) , Variable(targets.view(-1)), Variable(masks)
-    isobject_outputs = net(inputs)['cls']['out'].view(-1)  
+
+    _, _, test_acc, test_loss, test_class_loss, test_reg_loss, best_acc = train(epoch, max_batches, is_train=False, best_acc=best_acc)
     
-    max_outputs, _ = torch.max(isobject_outputs.view(batch_size, -1), 1, keepdim=True) 
-    center_predict = isobject_outputs.view(batch_size, -1).eq(max_outputs)
+    train_acc_array.append([epoch, training_time, train_acc, train_loss, train_class_loss, train_reg_loss])
+    test_acc_array.append([epoch, training_time, test_acc, test_loss, test_class_loss, test_reg_loss]) 
     
-    total += float(batch_size)
-    
-    correct += torch.masked_select(masks.view(batch_size, -1), center_predict).eq(1).float().cpu().sum().data.numpy()[0]  
-    
-    # Loss criterion 
-    isobject_criterion = nn.BCEWithLogitsLoss(value_filter) 
-    # Reshape output 
-    loss  = isobject_criterion(isobject_outputs, masks)
-    
-    test_loss += loss.data[0] 
-    
-    epoch_time = progress_bar(batch_idx, len(testloader), 'Test Loss: %.3f | Test Acc: %.3f%% (%d/%d) | lr: %.4f'
-          % (test_loss/(batch_idx+1), 100.*correct/total, correct, total,  lr))
-    num_iter+= 1 
-    if num_batches >= max_batches:
-      break 
-  # Save checkpoint.
-  acc = 100.*correct/total
-  if acc > best_acc:
-      print('Saving..')
-      state = {
-          'net': net, #net.module if use_cuda else net,
-          'acc': acc,
-          'epoch': epoch, 
-      }
-      if not os.path.exists(args.model):
-          os.makedirs(args.model, exist_ok=True) # exist_ok: allows recursive (mkdir -p) 
-      torch.save(state, os.path.join(args.model,'ckpt.t7') )
-      best_acc = acc
-  return  100.*correct/total 
-
-lr = args.lr # Initial learning rate 
-training_time = 0 
-epoch_time = 0 
-train_acc_array = [] 
-test_acc_array = [] 
-for epoch in range(start_epoch, start_epoch+args.max_epoches):
-  lr, epoch_time, train_acc = train(epoch, 100, lr, args.visual)
-  training_time += epoch_time 
-  if epoch == args.max_epoches-1:
-    max_batches = 100
-  else: 
-    max_batches = 5
-  
-
-  # test_acc = test(epoch, max_batches)
-  
-  # train_acc_array.append([epoch, training_time, train_acc])
-  # test_acc_array.append([epoch, training_time, test_acc]) 
-  
-  sys.stdout.write('\n=================================================================================\n')
-  progress_bar(epoch, args.max_epoches, 'Current epoch: %d, tot_time: %.3f, epoch_time: %.3f******'%(epoch, training_time, epoch_time))  
+    sys.stdout.write('\n=================================================================================\n')
+    progress_bar(epoch, args.max_epoches, 'Current epoch: %d, tot_time: %.3f, epoch_time: %.3f******'%(epoch, training_time, epoch_time))  
 
 
-# Save the results
-train_acc_array = np.array(train_acc_array)  
-np.savetxt(os.path.join(args.model, 'train_accuracy.txt'), train_acc_array) 
+  # Save the results
+  train_acc_array = np.array(train_acc_array)  
+  np.savetxt(os.path.join(args.model, 'train_accuracy.txt'), train_acc_array) 
 
 
-# test_acc_array = np.array(test_acc_array)  
-# np.savetxt(os.path.join(args.model, 'test_accuracy.txt'), test_acc_array) 
+  test_acc_array = np.array(test_acc_array)  
+  np.savetxt(os.path.join(args.model, 'test_accuracy.txt'), test_acc_array) 
 
-# Plot results 
-fig = plt.figure() 
-plt.plot(train_acc_array[:, 2], color='b') 
-# plt.plot(test_acc_array[:, 2], color='r')
-plt.xlabel('x 100 (Iterations)') 
-plt.ylabel('Accuracy') 
-plt.title('Training vs Testing Accuracy') 
-# plt.legend(['Train', 'Test'])
-plt.savefig(os.path.join(args.model, 'accuracy.png'))   
+  # Plot results 
+  plt.subplot(221)
+  plt.plot(train_acc_array[:, 2], color='b') 
+  plt.plot(test_acc_array[:, 2], color='r')
+  plt.xlabel('x 100 (Iterations)') 
+  plt.ylabel('Accuracy') 
+  plt.title('Training vs Testing Accuracy') 
+  plt.legend(['Train', 'Test'])
+  plt.savefig(os.path.join(args.model, 'accuracy.png'))   
+
+  plt.subplot(222)
+  plt.plot(train_acc_array[:, 3], color='b') 
+  plt.plot(test_acc_array[:, 3], color='r')
+  plt.xlabel('x 100 (Iterations)') 
+  plt.ylabel('Total Loss') 
+  plt.title('Training vs Testing Total Loss') 
+  plt.legend(['Train', 'Test'])
+  plt.savefig(os.path.join(args.model, 'total_loss.png'))   
+
+
+  plt.subplot(223)
+  plt.plot(train_acc_array[:, 4], color='b') 
+  plt.plot(test_acc_array[:, 4], color='r')
+  plt.xlabel('x 100 (Iterations)') 
+  plt.ylabel('Classification Loss') 
+  plt.title('Training vs Testing Classification Loss') 
+  plt.legend(['Train', 'Test'])
+  plt.savefig(os.path.join(args.model, 'class_loss.png'))   
+
+  plt.subplot(224)
+  plt.plot(train_acc_array[:, 5], color='b') 
+  plt.plot(test_acc_array[:, 5], color='r')
+  plt.xlabel('x 100 (Iterations)') 
+  plt.ylabel('Regression Loss') 
+  plt.title('Training vs Testing Regression Loss') 
+  plt.legend(['Train', 'Test'])
+  plt.savefig(os.path.join(args.model, 'Regression_loss.png'))   
 
 
 
 
 
-
-
-
-
-
-
-
-
-
+# Run the experiments 
+run()
