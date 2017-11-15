@@ -133,7 +133,7 @@ lr_array = []
 # Find anchors (x_a, y_a, w_a) N x 3 x 36 
 mask_indices = utils.map_mask_2_img_coordinates()  # (2 x 36)
 # TODO: set this value to a proper value
-w_a = 32 # I think it should be 44 but TA said it is 32 
+w_a = 40 # I think it should be 40 but TA said it is 32 
 w_a_array = w_a*np.ones(36)
 mask_indices = np.vstack([mask_indices, w_a_array])
  
@@ -159,8 +159,8 @@ def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None
   train_class_loss = 0 
   train_reg_loss = 0 
 
-  correct = 0 
-  total = 0
+  #correct = 0 
+  #total = 0
   num_iter = 0  
   dataloader_queue = trainloader if is_train else testloader
 
@@ -205,7 +205,7 @@ def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None
     # pdb.set_trace()
   
     reg_loss = utils.get_reg_loss(reg_outputs, boxes, one_filter, anchors) # Sum over minibatch 
-    print('==> Net %s | Type Loss: %s | Reg loss %.3f over %d total boxes| '%(args.net, args.loss_type, reg_loss.data[0], one_filter.data.sum()))
+    print('==> Net %s | Type Loss: %s | Reg loss %.4f over %d total boxes| '%(args.net, args.loss_type, reg_loss.data[0], one_filter.data.sum()))
     
     
     # Get accuracy 
@@ -216,13 +216,16 @@ def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None
     #correct += torch.masked_select(masks.view(, center_predict).eq(1).float().cpu().sum().data.numpy()[0]  
     
     # Get accuracy 
-    pos_thresh, neg_thresh = 0.75, 0.25
-    total += batch_size
-    sigmoided_isobject_outputs = torch.sigmoid(isobject_outputs)
+    pos_thresh = 0.5 
+    use_sigmoid = True 
+    if use_sigmoid:
+      sigmoided_isobject_outputs = torch.sigmoid(isobject_outputs)
+    else:
+      sigmoided_isobject_outputs = isobject_outputs
     pos_pred = (sigmoided_isobject_outputs >= pos_thresh).float()
-    neg_pred = (sigmoided_isobject_outputs <= neg_thresh).float() 
-    correct += (pos_pred * one_filter).sum().data.numpy()[0] + (neg_pred * zero_filter).sum().data.numpy()[0]
-    total   +=  one_filter.sum().data.numpy()[0] + zero_filter.sum().data.numpy()[0]
+    neg_pred = (sigmoided_isobject_outputs < pos_thresh).float() 
+    correct  = (pos_pred * one_filter).sum().cpu().data.numpy()[0] + (neg_pred * zero_filter).sum().cpu().data.numpy()[0]
+    total    =  one_filter.sum().cpu().data.numpy()[0] + zero_filter.sum().cpu().data.numpy()[0]
     #print('Correct:', correct, 'total:', total)  
     class_loss  = isobject_criterion(isobject_outputs.view(-1), masks.view(-1)) # evarage over minibatch 
 
@@ -242,10 +245,13 @@ def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None
     train_class_loss += class_loss.data[0] 
     train_reg_loss += reg_loss.data[0] 
     train_loss += total_loss.data[0]
-    epoch_time = progress_bar(batch_idx, len(trainloader), 'Is train: %d  | Total Loss: %.3f | Class Loss: %.3f |Reg Loss: %.3f |Acc: %.3f%% | (%d/%d) | lr: %.6f'
-          % (int(is_train), train_loss/(batch_idx+1), train_class_loss/(batch_idx+1), train_reg_loss/(batch_idx+1), 100.*correct/total, correct, total,  lr))
-    num_iter+= 1 
+    #epoch_time = progress_bar(batch_idx, len(trainloader), 'Is train: %d  | Total Loss: %.3f | Class Loss: %.4f |Reg Loss: %.4f |Acc: %.3f%% | (%d/%d) | lr: %.6f'
+        #  % (int(is_train), train_loss/(batch_idx+1), train_class_loss/(batch_idx+1), train_reg_loss/(batch_idx+1), 100.*correct/total, correct, total,  lr))
     
+    epoch_time = progress_bar(batch_idx, len(trainloader), 'Is train: %d  | Total Loss: %.3f | Class Loss: %.4f |Reg Loss: %.4f |Acc: %.3f%% | (%d/%d) | lr: %.6f'
+          % (int(is_train), total_loss.data[0], class_loss.data[0], reg_loss.data[0], 100.*correct/total, correct, total,  lr))
+    
+    num_iter+= 1 
     
     if max_iter and num_iter >= max_iter:
       break   

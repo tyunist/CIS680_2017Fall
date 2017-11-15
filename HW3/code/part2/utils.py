@@ -20,26 +20,52 @@ from skimage.draw import polygon
 from skimage.transform import resize 
 classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck') 
 
-def get_smooth_L1_loss(delta_t):
-  """delta_t : N x d"""
+def v2_get_smooth_L1_loss(delta_t):
+  """delta_t : N x 3 x d"""
   # Get norm
  
   if  isinstance(delta_t, torch.Tensor):
     delta_t = delta_t.data 
-    norm_delta =  torch.norm(delta_t, 2, dim=1)
+    norm_delta = torch.abs(delta_t) # N x 3 x d , absolute values 
+     
+ 
     # The rest is equivalent to the following naive code 
     # if norm_delta < 1:
-    #   return 0.5*norm_delta
+    #   return 0.5*norm_delta^2
     # else:
     #   return norm_delta - 0.5 
     one_mask = (norm_delta < 1).float() 
-    multi_factor = 1 - torch.mul(one_mask,  torch.FloatTensor([0.5]))  
+    multi_factor = (1 - torch.mul(one_mask,  torch.FloatTensor([0.5])) )*norm_delta 
+    add_factor = torch.mul((1 - one_mask), torch.FloatTensor([-0.5]))
+
+  else:
+    norm_delta = torch.abs(delta_t) # N x 3 x d , absolute values 
+    one_mask = (norm_delta < 1).float() 
+    multi_factor = (1 -  0.5*one_mask)*norm_delta
+    add_factor = -0.5*(1 - one_mask) 
+  
+  return multi_factor*norm_delta + add_factor   
+
+def get_smooth_L1_loss(delta_t):
+  """delta_t : N x 3 x d"""
+  # Get norm
+ 
+  if  isinstance(delta_t, torch.Tensor):
+    delta_t = delta_t.data 
+    norm_delta =  torch.norm(delta_t, 2, dim=1) # N x d 
+    # The rest is equivalent to the following naive code 
+    # if norm_delta < 1:
+    #   return 0.5*norm_delta^2
+    # else:
+    #   return norm_delta - 0.5 
+    one_mask = (norm_delta < 1).float() 
+    multi_factor = (1 - torch.mul(one_mask,  torch.FloatTensor([0.5])) )*norm_delta 
     add_factor = torch.mul((1 - one_mask), torch.FloatTensor([-0.5]))
 
   else:
     norm_delta = delta_t.norm(p=2,dim=1)
     one_mask = (norm_delta < 1).float() 
-    multi_factor = 1 -  0.5*one_mask
+    multi_factor = (1 -  0.5*one_mask)*norm_delta
     add_factor = -0.5*(1 - one_mask) 
   
   return multi_factor*norm_delta + add_factor   
@@ -95,15 +121,17 @@ def get_reg_loss(reg_outputs, boxes, weights, anchors):
   if anchors.ndimension() < 3:
     anchors.unsqueeze(2)
     anchors =  anchors.expand_as(reg_outputs )
-
   # Normalize reg_outputs 
   norm_reg = normalize_reg_outputs(reg_outputs, anchors)
   # Normalize gt 
   norm_gt = normalize_reg_outputs(boxes, anchors)
-  
   # Obtain Smooth L1 loss
-  reg_loss = get_smooth_L1_loss(norm_reg - norm_gt)  
- 
+  # TODO: change smooth L1 loss 
+  #reg_loss = get_smooth_L1_loss(norm_reg - norm_gt)  # N x 36 
+  v2_reg_loss = v2_get_smooth_L1_loss(norm_reg - norm_gt)  # N x 3 x 36 
+  
+  reg_loss = v2_reg_loss.sum(dim=1) # N x 36 
+  
   if (batch_size*weights).data.sum() < 1e-8:
     reg_loss = reg_loss.sum()*0
     print('===> Reg loss = 0 since there is no box') 
