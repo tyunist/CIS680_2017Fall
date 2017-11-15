@@ -25,9 +25,29 @@ def get_rep_field(n_in, j_in, r_in, start_in, kernel_size, stride, padding):
   start_out = start_in + ((kernel_size-1)/2 - padding)*j_in 
   return n_out, j_out, r_out, start_out 
 
+def init_fasterrcnn_params(net, method_name='xavier' ):
+  # Initialize weights for classnet and basenet 
+  print('\n****basenet:')
+  #net.basenet.apply(init_weight_params)  
+  init_weight_params(net.basenet, method_name)
+  print('\n****classnet:')
+  
+  #net.classnet.apply(init_weight_params)
+  init_weight_params(net.classnet, method_name) 
+  # Initialize weights for boxregressionnet 
+  # (Initialize bias for convolutional layer) 
+  print('\n***regnet:')
+  for m in net.regressionnet.modules():
+    if isinstance(m, nn.Conv2d):
+      print('==> layer', m)
+      m.bias.data = torch.FloatTensor([24,24,32])
+  
+
 def init_weight_params(net, method_name='xavier'):
   for m in net.modules():
+    print('==> layer', m)
     if isinstance(m, nn.Conv2d):
+      print('Initialize conv2d')
       if method_name == 'xavier':
         init.xavier_normal(m.weight.data)
         if m.bias is not None:  
@@ -51,8 +71,6 @@ class BoxRegressionNet680(nn.Module):
     self.conv = nn.Conv2d(input_channels, self.cfg[2], kernel_size=(self.cfg[0], self.cfg[1]), stride=1, padding=0, bias=True)
     n_in, j_in, r_in, start_in = get_rep_field(n_in, j_in, r_in, start_in, kernel_size=self.cfg[0], stride=1, padding=0)
     print('==>conv', n_in, j_in, r_in, start_in ) 
-    # Initialize bias for convolutional layer 
-    self.conv.bias.data = torch.FloatTensor([24,24,32])
 
     self.out_config = (n_in, j_in, r_in, start_in)
 
@@ -183,9 +201,6 @@ class Faster_RCNN_net680(nn.Module):
     in_channels = class_proposal_cfg[0][2]
     self.regressionnet = BoxRegressionNet680(in_channels, self.out_intermediate_config)
     self.out_regressionnet_config = self.regressionnet.out_config 
-    # Initialize weights for classnet and basenet 
-    self.basenet.apply(init_weight_params)  
-    self.classnet.apply(init_weight_params)
     #self.regressionnet.apply(init_box_regression_params) 
 
     print('===> Basenet out config:', self.out_basenet_config)
@@ -220,6 +235,10 @@ def test_separate():
 
 def test_faster_rcnn_net():
   fasterrcnnnet = Faster_RCNN_net680()
+  # Initialize params for fasterrcnnnet 
+  print('\n===> Initializing params for fasterrcnnnet...') 
+  init_fasterrcnn_params(fasterrcnnnet)
+  
   x = torch.randn(2,3,48,48)
   out = fasterrcnnnet(Variable(x))
   

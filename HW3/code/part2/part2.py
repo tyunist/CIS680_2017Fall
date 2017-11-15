@@ -30,7 +30,7 @@ parser.add_argument('--data_path', default='/home/tynguyen/cis680/data/cifar10_t
 parser.add_argument('--resume', default='false', type=str2bool, help='resume from checkpoint')
 parser.add_argument('--visual', default='false', type=str2bool, help='Display images')
 parser.add_argument('--optim', default='adam', type=str, help='Type of optimizer', choices=['adam', 'sgd'])
-parser.add_argument('--net', default='convnet', type=str, help='Type of nets', choices=['convnet', 'mobilenet', 'resnet', 'fasterrcnnnet'])
+parser.add_argument('--net', default='fasterrcnnnet', type=str, help='Type of nets', choices=['convnet', 'mobilenet', 'resnet', 'fasterrcnnnet'])
 parser.add_argument('--loss_type', default='total', type=str, help='Type of loss functions', choices=['total','cls', 'reg'])
 args = parser.parse_args()
 use_cuda = False 
@@ -110,8 +110,25 @@ else:
     elif args.net == 'basenet':
       net = BaseNet680()
     elif args.net == 'fasterrcnnnet':
-      net = Faster_RCNN_net680() 
-
+      net = Faster_RCNN_net680()
+      # Initialize net 
+      print('\n====================================================')
+      print('===> Initializing parameters for net') 
+      init_fasterrcnn_params(net, 'xavier') 
+      # Test
+      print('\n====================================================')
+      print('===> Testing initialization....') 
+      basenet = net.basenet 
+      regressionnet = net.regressionnet
+      print('===> Test base net')
+      for m in basenet.modules():
+        if isinstance(m, nn.Conv2d):
+          print('layer', m)
+          print('===> Basenet weight mean, std:', m.weight.data.cpu().numpy().mean(), m.weight.data.cpu().numpy().std())  
+      for n in regressionnet.modules():
+        if isinstance(n, nn.Conv2d):
+          print('\n====>Regression Net Bias after initialized:;', n.bias.data) 
+          assert torch.equal(n.bias.data, torch.FloatTensor([24,24,32])), '===> Error! Faster RNN net not initialized!'
 if use_cuda:
   net.cuda() 
   #net.torch.nn.DataParallel(net, device_ids=range(torch.cuda.device_count()))
@@ -279,17 +296,23 @@ def run():
   best_acc = 0 
 
   for epoch in range(start_epoch, start_epoch+args.max_epoches):
+    # Train 
+    if epoch > 0:
+      lr, epoch_time, train_acc, train_loss, train_class_loss, train_reg_loss, _ = train(epoch, 100, lr, args.visual)
+      training_time += epoch_time 
+    # Test 
     if epoch == args.max_epoches-1:
       max_batches = 100
     else: 
-      max_batches = 20 
+      max_batches = 100 
     _, _, test_acc, test_loss, test_class_loss, test_reg_loss, best_acc = train(epoch, max_batches, is_train=False, best_acc=best_acc)
-    lr, epoch_time, train_acc, train_loss, train_class_loss, train_reg_loss, _ = train(epoch, 100, lr, args.visual)
-    training_time += epoch_time 
     
 
-    
-    train_acc_array.append([epoch, training_time, train_acc, train_loss, train_class_loss, train_reg_loss])
+    if epoch > 0:
+      train_acc_array.append([epoch, training_time, train_acc, train_loss, train_class_loss, train_reg_loss])
+    else:
+      train_acc_array.append([epoch, training_time, test_acc, test_loss, test_class_loss, test_reg_loss]) 
+      
     test_acc_array.append([epoch, training_time, test_acc, test_loss, test_class_loss, test_reg_loss]) 
     
     sys.stdout.write('\n=================================================================================\n')
@@ -305,7 +328,7 @@ def run():
   np.savetxt(os.path.join(args.model, 'test_accuracy.txt'), test_acc_array) 
 
   # Plot results 
-  plt.figure(figsize=(12,12))
+  plt.figure(figsize=(12,14))
   plt.subplot(221)
   plt.plot(train_acc_array[:, 2], color='b') 
   plt.plot(test_acc_array[:, 2], color='r')
