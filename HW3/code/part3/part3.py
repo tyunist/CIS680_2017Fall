@@ -25,7 +25,7 @@ parser.add_argument('--min_lr', default=1e-4, type=float, help='Min of learning 
 parser.add_argument('--max_epoches', default=20, type=int, help='Max number of epoches')
 parser.add_argument('--GPU', default=1, type=int, help='GPU core')
 parser.add_argument('--use_GPU', default='true', type=str2bool, help='Use GPU or not')
-parser.add_argument('--model', default='/home/tynguyen/cis680/logs/HW3/part2/2.1', type=str, help='Model path')
+parser.add_argument('--model', default='/home/tynguyen/cis680/logs/HW3/part3/3.1', type=str, help='Model path')
 parser.add_argument('--data_path', default='/home/tynguyen/cis680/data/cifar10_transformed', type=str, help='Data path')
 parser.add_argument('--resume', default='false', type=str2bool, help='resume from checkpoint')
 parser.add_argument('--visual', default='false', type=str2bool, help='Display images')
@@ -183,12 +183,14 @@ def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None
 
   for batch_idx, sample_batched in enumerate(dataloader_queue):
     batch_size = sample_batched['image'].size(0) 
-    # print(batch_idx, sample_batched['image'].size(), sample_batched['label'].view(-1).size(), sample_batched['mask'].view(-1).size() ) 
-    if batch_idx == 0 and visual==True:
-      plt.figure() 
-      batch_display(sample_batched)
-      plt.axis('off')
-      plt.show()
+    print(batch_idx, sample_batched['image'].size(), sample_batched['label'].view(-1).size(), sample_batched['mask'].view(-1).size() ) 
+    #if batch_idx < 2 and args.visual==True:
+    #  plt.figure() 
+    #  batch_display(sample_batched)
+    #  plt.axis('off')
+    #  plt.show()
+    #else:
+    #  print('==> No visual since visual = ', visual)
     # Input data  
     inputs = sample_batched['image']
     targets = sample_batched['label']
@@ -258,7 +260,31 @@ def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None
     epoch_time = progress_bar(batch_idx, len(trainloader), 'Is train: %d  | Total Loss: %.3f | Class Loss: %.4f |Reg Loss: %.4f |Acc: %.3f%% | (%d/%d) | lr: %.6f'
           % (int(is_train), train_loss/(batch_idx+1), train_class_loss/(batch_idx+1), train_reg_loss/(batch_idx+1), 100.*correct/total, correct, total,  lr))
     
+    # Apply spatial transformer on the image 
+    # First, use ground truth
+    print('===> Applying spatial transformer....') 
+    gt_theta = utils.box_proposal_to_theta(boxes)
+    tf_gt_inputs = utils.torch_spatial_transformer(inputs, gt_theta, (32,32)) 
     
+    
+    # Find predicted boxes which have max classification prediction 
+    box_index_confed, pos_box_index = torch.max(isobject_outputs, dim=1, keepdim=True)
+    permuted_reg_outputs = reg_outputs.permute(2,0,1)
+    pred_boxes = permuted_reg_outputs[pos_box_index.data.view(-1),torch.LongTensor(range(batch_size)),: ] 
+    
+    pred_theta = utils.box_proposal_to_theta(pred_boxes)
+    tf_pred_inputs = utils.torch_spatial_transformer(inputs, pred_theta, (32,32)) 
+     
+    #tf_pred_inputs = utils.torch_spatial_transformer(, theta, (32,32)) 
+    if args.visual == True and num_iter == max_iter - 1:
+      utils.batch_display_transformed(inputs, tf_gt_inputs, tf_pred_inputs, num_el=10)  
+      plt.axis('off')
+      if not os.path.exists(args.model):
+        os.makedirs(args.model)
+      plt.savefig(os.path.join(args.model, 'transformed_images.png'))
+      plt.show()  
+ 
+     
     num_iter+= 1 
     
     if max_iter and num_iter >= max_iter:
@@ -304,7 +330,7 @@ def run():
     if epoch == args.max_epoches-1:
       max_batches = 100
     else: 
-      max_batches = 100 
+      max_batches = 2 #100 
     _, _, test_acc, test_loss, test_class_loss, test_reg_loss, best_acc = train(epoch, max_batches, is_train=False, best_acc=best_acc)
     
 
@@ -372,3 +398,4 @@ def run():
 
 # Run the experiments 
 run()
+
