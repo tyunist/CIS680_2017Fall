@@ -25,13 +25,16 @@ parser.add_argument('--min_lr', default=1e-4, type=float, help='Min of learning 
 parser.add_argument('--max_epoches', default=20, type=int, help='Max number of epoches')
 parser.add_argument('--GPU', default=1, type=int, help='GPU core')
 parser.add_argument('--use_GPU', default='true', type=str2bool, help='Use GPU or not')
-parser.add_argument('--model', default='/home/tynguyen/cis680/logs/HW3/part3/3.1', type=str, help='Model path')
+parser.add_argument('--model', default='/home/tynguyen/cis680/logs/HW3/part3/3.13.13.1', type=str, help='Model path')
 parser.add_argument('--data_path', default='/home/tynguyen/cis680/data/cifar10_transformed', type=str, help='Data path')
 parser.add_argument('--resume', default='false', type=str2bool, help='resume from checkpoint')
 parser.add_argument('--visual', default='false', type=str2bool, help='Display images')
 parser.add_argument('--optim', default='adam', type=str, help='Type of optimizer', choices=['adam', 'sgd'])
 parser.add_argument('--net', default='fasterrcnnnet', type=str, help='Type of nets', choices=['convnet', 'mobilenet', 'resnet', 'fasterrcnnnet'])
 parser.add_argument('--loss_type', default='total', type=str, help='Type of loss functions', choices=['total','cls', 'reg'])
+parser.add_argument('--init_method', default='truncated_normal', type=str, help='Type of initialization functions', choices=['xavier','truncated_normal', 'v2_truncated_normal'])
+
+
 args = parser.parse_args()
 use_cuda = False 
 if args.use_GPU:
@@ -87,7 +90,7 @@ if args.resume:
   net = checkpoint['net'] 
   best_acc = checkpoint['acc'] 
   start_epoch = checkpoint['epoch'] 
-
+  args.lr = 1e-4
 else:
     print('==> Building model..')
     # net = VGG('VGG19')
@@ -124,7 +127,7 @@ else:
       for m in basenet.modules():
         if isinstance(m, nn.Conv2d):
           print('layer', m)
-          print('===> Basenet weight mean, std:', m.weight.data.cpu().numpy().mean(), m.weight.data.cpu().numpy().std())  
+          print('===> Basenet weight mean, std, range ', m.weight.data.cpu().numpy().mean(), m.weight.data.cpu().numpy().std(), np.max(m.weight.data.cpu().numpy()), np.min(m.weight.data.cpu().numpy()))  
       for n in regressionnet.modules():
         if isinstance(n, nn.Conv2d):
           print('\n====>Regression Net Bias after initialized:;', n.bias.data) 
@@ -138,7 +141,7 @@ if use_cuda:
 
 # Optimizer 
 # Find learning rate decay factor 
-lr_decay_f = (args.min_lr/args.lr)**(1./(args.max_epoches) )
+lr_decay_f = (args.min_lr/args.lr)**(1./(args.max_epoches-1) )
 if args.optim == 'sgd':
   optimizer  = optim.SGD(net.parameters(), lr=args.lr, momentum=0.9, weight_decay=5e-4) 
 else:
@@ -266,23 +269,32 @@ def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None
     gt_theta = utils.box_proposal_to_theta(boxes)
     tf_gt_inputs = utils.torch_spatial_transformer(inputs, gt_theta, (32,32)) 
     
-    
     # Find predicted boxes which have max classification prediction 
     box_index_confed, pos_box_index = torch.max(isobject_outputs, dim=1, keepdim=True)
     permuted_reg_outputs = reg_outputs.permute(2,0,1)
-    pred_boxes = permuted_reg_outputs[pos_box_index.data.view(-1),torch.LongTensor(range(batch_size)),: ] 
+    batch_indices = torch.LongTensor((range(batch_size)))
+    if use_cuda: 
+      batch_indices = batch_indices.cuda() 
+      
+    pred_boxes = permuted_reg_outputs[pos_box_index.data.view(-1),batch_indices,: ] 
     
     pred_theta = utils.box_proposal_to_theta(pred_boxes)
     tf_pred_inputs = utils.torch_spatial_transformer(inputs, pred_theta, (32,32)) 
      
     #tf_pred_inputs = utils.torch_spatial_transformer(, theta, (32,32)) 
-    if args.visual == True and num_iter == max_iter - 1:
+    if num_iter == max_iter - 1:
       utils.batch_display_transformed(inputs, tf_gt_inputs, tf_pred_inputs, num_el=10)  
       plt.axis('off')
       if not os.path.exists(args.model):
         os.makedirs(args.model)
-      plt.savefig(os.path.join(args.model, 'transformed_images.png'))
-      plt.show()  
+      if is_train:
+        fig_name = 'train_transformed_images.png'
+      else:
+        fig_name = 'test_transformed_images.png'
+      plt.savefig(os.path.join(args.model, fig_name))
+      if args.visual == True:
+        plt.show()  
+      plt.close()
  
      
     num_iter+= 1 
@@ -392,7 +404,8 @@ def run():
   plt.legend(['Train', 'Test'])
   plt.savefig(os.path.join(args.model, 'Regression_loss.png'))   
 
-
+  print('=================================================================>')
+  print('Finish running', args) 
 
 
 

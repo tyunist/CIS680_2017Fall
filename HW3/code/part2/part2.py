@@ -20,12 +20,12 @@ def str2bool(v):
   return v.lower() in ('true', '1') 
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
-parser.add_argument('--lr', default=1e-3, type=float, help='learning rate')
-parser.add_argument('--min_lr', default=1e-4, type=float, help='Min of learning rate')
+parser.add_argument('--lr', default=3e-3, type=float, help='learning rate')
+parser.add_argument('--min_lr', default= 1e-4, type=float, help='Min of learning rate')
 parser.add_argument('--max_epoches', default=20, type=int, help='Max number of epoches')
 parser.add_argument('--GPU', default=1, type=int, help='GPU core')
 parser.add_argument('--use_GPU', default='true', type=str2bool, help='Use GPU or not')
-parser.add_argument('--model', default='/home/tynguyen/cis680/logs/HW3/part2/2.1', type=str, help='Model path')
+parser.add_argument('--model', default='/home/tynguyen/cis680/logs/HW3/part2/2.2', type=str, help='Model path')
 parser.add_argument('--data_path', default='/home/tynguyen/cis680/data/cifar10_transformed', type=str, help='Data path')
 parser.add_argument('--resume', default='false', type=str2bool, help='resume from checkpoint')
 parser.add_argument('--visual', default='false', type=str2bool, help='Display images')
@@ -304,7 +304,7 @@ def run():
     if epoch == args.max_epoches-1:
       max_batches = 100
     else: 
-      max_batches = 100 
+      max_batches = 10  
     _, _, test_acc, test_loss, test_class_loss, test_reg_loss, best_acc = train(epoch, max_batches, is_train=False, best_acc=best_acc)
     
 

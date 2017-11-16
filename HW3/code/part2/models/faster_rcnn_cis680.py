@@ -53,7 +53,7 @@ def init_weight_params(net, method_name='xavier'):
         if m.bias is not None:  
           # if bias has only one dimension, just initialize using normal distribution
           if m.bias.data.ndimension() < 2:
-            m.bias.data.normal_(0,0.001) 
+            m.bias.data.normal_(0,0.01) 
           else: 
             init.xavier_uniform(m.bias.data)
     if isinstance(m, nn.Linear):

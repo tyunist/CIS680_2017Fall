@@ -18,6 +18,21 @@ class_proposal_cfg = [(3, 3, 256),
 
 box_regression_cfg = [(1, 1, 3)]
 
+def truncated_normal_init(m):
+  # sample u1:
+  size = m.weight.size()
+  u1 = torch.rand(size)*(1-np.exp(-2)) + np.exp(-2)
+  # sample u2:
+  u2 = torch.rand(size)
+  # sample the truncated gaussian ~TN(0,1,[-2,2]):
+  z = torch.sqrt(-2*log(u1)) * torch.cos(2*np.pi*u2)
+  m.weight.data = z
+
+
+def v2_truncated_normal_init(m):
+  size = m.weight.size()
+  m.weight.data = torch.fmod(torch.rand(size),2)
+ 
 def get_rep_field(n_in, j_in, r_in, start_in, kernel_size, stride, padding):
   n_out = (n_in + 2*padding - kernel_size)/stride + 1 
   j_out = j_in * stride 
@@ -44,21 +59,23 @@ def init_fasterrcnn_params(net, method_name='xavier' ):
   
 
 def init_weight_params(net, method_name='xavier'):
+  methods = {'xavier': init.xavier_normal, 'v2_truncated_normal':v2_truncated_normal_init, 'truncated_normal':truncated_normal_init}
+  constant_val = 0.1
   for m in net.modules():
     print('==> layer', m)
     if isinstance(m, nn.Conv2d):
       print('Initialize conv2d')
-      if method_name == 'xavier':
-        init.xavier_normal(m.weight.data)
-        if m.bias is not None:  
-          # if bias has only one dimension, just initialize using normal distribution
-          if m.bias.data.ndimension() < 2:
-            m.bias.data.normal_(0,0.01) 
-          else: 
-            init.xavier_uniform(m.bias.data)
+      methods[method_name](m.weight.data)
+      if m.bias is not None:  
+        # if bias has only one dimension, just initialize using normal distribution
+        if m.bias.data.ndimension() < 2:
+          #m.bias.data.normal_(0,0.01)
+          init.constant(m.bias.data, constant_val) 
+        else: 
+          #methods[method_name](m.bias.data)
+          init.constant(m.bias.data, constant_val)
     if isinstance(m, nn.Linear):
-      if method_name == 'xavier':
-        init.xavier_normal(nn.weight.data)
+      methods[method_name](nn.weight.data)
 
 class BoxRegressionNet680(nn.Module):
   """Regress the box. 
