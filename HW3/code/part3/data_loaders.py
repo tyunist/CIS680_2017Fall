@@ -41,6 +41,10 @@ class cifar10_transformed_loader_obj(data.Dataset):
     img = io.imread(self.data[index])
     mask = io.imread(self.mask[index])
     label = np.array([self.label[index]]) 
+    # Transfrom labels into one_hot format 
+    #one_hot = np.zeros(10) 
+    #one_hot[self.label[index]] = 1 
+    #label = one_hot   
     box = np.array([self.box[index]])
     #label = self.label[index].astype(np.int) 
     #img = torch.from_numpy(img.astype(np.float32))

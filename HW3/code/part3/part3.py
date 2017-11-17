@@ -31,7 +31,7 @@ parser.add_argument('--resume', default='false', type=str2bool, help='resume fro
 parser.add_argument('--visual', default='false', type=str2bool, help='Display images')
 parser.add_argument('--optim', default='adam', type=str, help='Type of optimizer', choices=['adam', 'sgd'])
 parser.add_argument('--net', default='fasterrcnnnet', type=str, help='Type of nets', choices=['convnet', 'mobilenet', 'resnet', 'fasterrcnnnet'])
-parser.add_argument('--loss_type', default='total', type=str, help='Type of loss functions', choices=['total','cls', 'reg'])
+parser.add_argument('--loss_type', default='total', type=str, help='Type of loss functions', choices=['total','cls', 'reg', 'object'])
 parser.add_argument('--init_method', default='truncated_normal', type=str, help='Type of initialization functions', choices=['xavier','truncated_normal', 'v2_truncated_normal'])
 
 
@@ -178,15 +178,18 @@ def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None
   train_loss = 0 
   train_class_loss = 0 
   train_reg_loss = 0 
+  train_object_loss = 0 
 
   correct = 0 
+  object_correct = 0 
   total = 0
+  total_object = 0 
   num_iter = 0  
   dataloader_queue = trainloader if is_train else testloader
 
   for batch_idx, sample_batched in enumerate(dataloader_queue):
     batch_size = sample_batched['image'].size(0) 
-    print(batch_idx, sample_batched['image'].size(), sample_batched['label'].view(-1).size(), sample_batched['mask'].view(-1).size() ) 
+    #print(batch_idx, sample_batched['image'].size(), sample_batched['label'].view(-1).size(), sample_batched['mask'].view(-1).size() ) 
     #if batch_idx < 2 and args.visual==True:
     #  plt.figure() 
     #  batch_display(sample_batched)
@@ -196,7 +199,7 @@ def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None
     #  print('==> No visual since visual = ', visual)
     # Input data  
     inputs = sample_batched['image']
-    targets = sample_batched['label']
+    targets = sample_batched['label'] # N x 1
     masks = sample_batched['mask']
     boxes = sample_batched['box'].view(batch_size, 3).float()
     anchors = anchors_tensor
@@ -212,7 +215,10 @@ def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None
     
     # Loss function for object vs non object  
     isobject_criterion = nn.BCEWithLogitsLoss(neq_two_filter) 
-  
+    # Loss function for object classification 
+    object_class_criterion = nn.NLLLoss()  # inputs is log softmax 
+
+
     # Predict output 
     if is_train:
       optimizer.zero_grad() 
@@ -220,17 +226,22 @@ def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None
     anchors = Variable(anchors)
     one_filter, zero_filter = Variable(one_filter), Variable(zero_filter)
     
-    outputs = net(inputs) 
-    isobject_outputs =  outputs['cls']['out'].view(batch_size, -1) # output: (N x 36)
-    reg_outputs = outputs['reg']['out'] # N x 3 x 36
-
+    # Obtain ground truth theta which will transform features 
+    gt_theta = box_proposal_to_theta(boxes)
+    
+    total_outputs = net(inputs, gt_theta) # TODO: delete gt_theta to use predicted theta instead  
+    isobject_outputs =  total_outputs['cls']['out'].view(batch_size, -1) # output: (N x 36)
+    reg_outputs = total_outputs['reg']['out'] # N x 3 x 36
+    cov4_outputs = total_outputs['base']['out'] # N x 256 x 6 x 6 
+    
     # pdb.set_trace()
-  
+    
+    # Regression Loss 
     reg_loss = utils.get_reg_loss(reg_outputs, boxes, one_filter, anchors) # Sum over minibatch 
-    print('==> Net %s | Type Loss: %s | Reg loss %.4f over %d total boxes| '%(args.net, args.loss_type, reg_loss.data[0], one_filter.data.sum()))
+    #print('==> Net %s | Type Loss: %s | Reg loss %.4f over %d total boxes| '%(args.net, args.loss_type, reg_loss.data[0], one_filter.data.sum()))
     
     
-    # Get accuracy 
+    # Is Object accuracy 
     pos_thresh = 0.5 
     use_sigmoid = True 
     if use_sigmoid:
@@ -243,15 +254,32 @@ def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None
     total    +=  one_filter.sum().cpu().data.numpy()[0] + zero_filter.sum().cpu().data.numpy()[0]
     #print('Correct:', correct, 'total:', total)  
     class_loss  = isobject_criterion(isobject_outputs.view(-1), masks.view(-1)) # evarage over minibatch 
+    
 
+    # Object classification Loss 
+    object_class_outputs = total_outputs['object'] # N x 10 (digits)
+    object_loss = object_class_criterion(object_class_outputs, targets)
+
+    # Find predicted classes 
+    _, pred_classes = torch.max(object_class_outputs, 1, keepdim=True) # N x 10 
+    object_correct += (pred_classes == targets.view_as(pred_classes)).float().data.cpu().sum()
+    total_object += batch_size 
+    #print('>>> Pred ', pred_classes)
+    #print('>>> GT: ', targets.view_as(pred_classes)) 
+    #print('>>> Correct:',(pred_classes == targets.view_as(pred_classes)).float().data.cpu().sum() )
+
+  
+    # Total Loss 
     # test only reg_loss
     use_loss_type  = args.loss_type  
     if use_loss_type == 'cls':
       total_loss = class_loss
     elif use_loss_type == 'reg':
       total_loss = reg_loss 
+    elif use_loss_type == 'object':
+      total_loss = object_loss 
     else:
-      total_loss = 10*reg_loss + class_loss   # multiply 10 to make regression run faster
+      total_loss = 10*reg_loss + class_loss + object_loss  # multiply 10 to make regression run faster
     
     if is_train:
       total_loss.backward() # Computer gradients 
@@ -259,30 +287,21 @@ def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None
 
     train_class_loss += class_loss.data[0] 
     train_reg_loss += reg_loss.data[0] 
+    train_object_loss += object_loss.data[0] 
     train_loss += total_loss.data[0]
-    epoch_time = progress_bar(batch_idx, len(trainloader), 'Is train: %d  | Total Loss: %.3f | Class Loss: %.4f |Reg Loss: %.4f |Acc: %.3f%% | (%d/%d) | lr: %.6f'
-          % (int(is_train), train_loss/(batch_idx+1), train_class_loss/(batch_idx+1), train_reg_loss/(batch_idx+1), 100.*correct/total, correct, total,  lr))
+    epoch_time = progress_bar(batch_idx, len(trainloader), 'Is train: %d  | Total Loss: %.3f | Class Loss: %.4f |Reg Loss: %.4f | Obj Loss: %.4f |Object Acc: %.3f%% | (%d/%d) |Proposal Acc: %.3f%% | (%d/%d) lr: %.6f'
+          % (int(is_train), train_loss/(batch_idx+1), train_class_loss/(batch_idx+1), train_reg_loss/(batch_idx+1), train_object_loss/(batch_idx+1),100.*object_correct/total_object, object_correct, total_object, 100.*correct/total, correct, total,  lr))
     
     # Apply spatial transformer on the image 
     # First, use ground truth
-    print('===> Applying spatial transformer....') 
-    gt_theta = utils.box_proposal_to_theta(boxes)
-    tf_gt_inputs = utils.torch_spatial_transformer(inputs, gt_theta, (32,32)) 
+    #print('===> Applying spatial transformer....') 
+    tf_gt_inputs = torch_spatial_transformer(inputs, gt_theta, (32,32)) 
     
-    # Find predicted boxes which have max classification prediction 
-    box_index_confed, pos_box_index = torch.max(isobject_outputs, dim=1, keepdim=True)
-    permuted_reg_outputs = reg_outputs.permute(2,0,1)
-    batch_indices = torch.LongTensor((range(batch_size)))
-    if use_cuda: 
-      batch_indices = batch_indices.cuda() 
-      
-    pred_boxes = permuted_reg_outputs[pos_box_index.data.view(-1),batch_indices,: ] 
-    
-    pred_theta = utils.box_proposal_to_theta(pred_boxes)
-    tf_pred_inputs = utils.torch_spatial_transformer(inputs, pred_theta, (32,32)) 
+    # Obtain predicted theta from the network 
+    pred_theta = total_outputs['theta'] 
+    tf_pred_inputs = torch_spatial_transformer(inputs, pred_theta, (32,32)) 
      
-    #tf_pred_inputs = utils.torch_spatial_transformer(, theta, (32,32)) 
-    if num_iter == max_iter - 1:
+    if visual == True and num_iter == max_iter - 1:
       utils.batch_display_transformed(inputs, tf_gt_inputs, tf_pred_inputs, num_el=10)  
       plt.axis('off')
       if not os.path.exists(args.model):
@@ -296,7 +315,9 @@ def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None
         plt.show()  
       plt.close()
  
-     
+    
+    
+   
     num_iter+= 1 
     
     if max_iter and num_iter >= max_iter:
@@ -320,7 +341,7 @@ def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None
   # Update learning rate after each epoch 
   lr_array.append(lr) 
   lr = adjust_lr(optimizer, lr_decay_f) 
-  return lr, epoch_time, 100.*correct/total, train_loss/(batch_idx+1), train_class_loss/(batch_idx+1), train_reg_loss/(batch_idx+1), best_acc
+  return lr, epoch_time, 100.*correct/total, 100.*object_correct/total_object, train_loss/(batch_idx+1), train_class_loss/(batch_idx+1), train_reg_loss/(batch_idx+1), train_object_loss/(batch_idx+1),  best_acc
 
  
 def run():
@@ -336,22 +357,22 @@ def run():
   for epoch in range(start_epoch, start_epoch+args.max_epoches):
     # Train 
     if epoch > 0:
-      lr, epoch_time, train_acc, train_loss, train_class_loss, train_reg_loss, _ = train(epoch, 100, lr, args.visual)
+      lr, epoch_time, train_acc, train_object_acc, train_loss, train_class_loss, train_reg_loss,train_object_loss,  _ = train(epoch, 100, lr, args.visual)
       training_time += epoch_time 
     # Test 
     if epoch == args.max_epoches-1:
       max_batches = 100
     else: 
       max_batches = 2 #100 
-    _, _, test_acc, test_loss, test_class_loss, test_reg_loss, best_acc = train(epoch, max_batches, is_train=False, best_acc=best_acc)
+    _, _, test_acc, test_object_acc, test_loss, test_class_loss, test_reg_loss, test_object_loss, best_acc = train(epoch, max_batches, is_train=False, best_acc=best_acc)
     
 
     if epoch > 0:
-      train_acc_array.append([epoch, training_time, train_acc, train_loss, train_class_loss, train_reg_loss])
+      train_acc_array.append([epoch, training_time, train_acc, train_object_acc, train_loss, train_class_loss, train_reg_loss, train_object_loss]) 
     else:
-      train_acc_array.append([epoch, training_time, test_acc, test_loss, test_class_loss, test_reg_loss]) 
+      train_acc_array.append([epoch, training_time, test_acc, test_object_acc, test_loss, test_class_loss, test_reg_loss, test_object_loss]) 
       
-    test_acc_array.append([epoch, training_time, test_acc, test_loss, test_class_loss, test_reg_loss]) 
+    test_acc_array.append([epoch, training_time, test_acc, test_object_acc, test_loss, test_class_loss, test_reg_loss, test_object_loss]) 
     
     sys.stdout.write('\n=================================================================================\n')
     progress_bar(epoch, args.max_epoches, 'Current epoch: %d, tot_time: %.3f, epoch_time: %.3f******'%(epoch, training_time, epoch_time))  

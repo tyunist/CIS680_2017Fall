@@ -1,3 +1,4 @@
+import pdb 
 import torch
 import torch.nn as nn 
 import torch.nn.functional as F 
@@ -5,6 +6,11 @@ from torch.autograd import Variable
 import torch.nn.init as init
 import time  
 from copy import deepcopy 
+try:
+  from .spatial_transformer import * 
+except:
+  from __init__ import * 
+
 basenet_cfg = [(5, 5, 32), 
        ('M', 2, 2, 0), 
        (5, 5, 64), 
@@ -17,6 +23,8 @@ class_proposal_cfg = [(3, 3, 256),
                       (1, 1, 1)]
 
 box_regression_cfg = [(1, 1, 3)]
+
+object_classification_cfg = [('F', 4096, 256)]
 
 def truncated_normal_init(m):
   # sample u1:
@@ -57,6 +65,8 @@ def init_fasterrcnn_params(net, method_name='xavier' ):
       print('==> layer', m)
       m.bias.data = torch.FloatTensor([24,24,32])
   
+  print('\n****Objectclassificationnet:')
+  init_weight_params(net.objectclassificationnet, method_name) 
 
 def init_weight_params(net, method_name='xavier'):
   methods = {'xavier': init.xavier_normal, 'v2_truncated_normal':v2_truncated_normal_init, 'truncated_normal':truncated_normal_init}
@@ -75,7 +85,36 @@ def init_weight_params(net, method_name='xavier'):
           #methods[method_name](m.bias.data)
           init.constant(m.bias.data, constant_val)
     if isinstance(m, nn.Linear):
-      methods[method_name](nn.weight.data)
+      methods[method_name](m.weight.data)
+      if m.bias is not None:  
+        # if bias has only one dimension, just initialize using normal distribution
+        if m.bias.data.ndimension() < 2:
+          #m.bias.data.normal_(0,0.01)
+          init.constant(m.bias.data, constant_val) 
+        else: 
+          #methods[method_name](m.bias.data)
+          init.constant(m.bias.data, constant_val)
+      
+
+class ObjectClassificationNet680(nn.Module):
+  """Classify object in 10 classes (Cifar10)"""
+  def __init__(self, input_channels=object_classification_cfg[0][1]):
+    super(ObjectClassificationNet680, self).__init__()
+    output_channels = object_classification_cfg[0][2]
+    self.full1 = nn.Linear(input_channels, output_channels, bias=True) 
+    self.bn1 = nn.BatchNorm1d(output_channels)
+    self.linear = nn.Linear(output_channels, 10, bias=False) 
+    self.LogSoftmax = nn.LogSoftmax() 
+  
+  def forward(self, x):
+    self.out_full1 = F.relu(self.bn1(self.full1(x))) 
+  
+    self.digits = self.linear(self.out_full1) 
+    self.out_log_softmax = self.LogSoftmax(self.digits) 
+    
+    return {'out_full':self.out_full1, 
+            'out':self.out_log_softmax}
+
 
 class BoxRegressionNet680(nn.Module):
   """Regress the box. 
@@ -210,27 +249,70 @@ class BaseNet680(nn.Module):
 class Faster_RCNN_net680(nn.Module):
   def __init__(self, in_channels=3):
     super(Faster_RCNN_net680, self).__init__() 
+    
     self.basenet = BaseNet680(in_channels)
     self.out_basenet_config = self.basenet.out_config 
-    in_channels = basenet_cfg[6][2] 
+    
+    in_channels = basenet_cfg[6][2]  
     self.classnet = ClassProposalNet680(in_channels, self.out_basenet_config)
     self.out_intermediate_config = self.classnet.out_intermediate_config 
-    in_channels = class_proposal_cfg[0][2]
+    
+    in_channels = class_proposal_cfg[0][2] 
     self.regressionnet = BoxRegressionNet680(in_channels, self.out_intermediate_config)
     self.out_regressionnet_config = self.regressionnet.out_config 
     #self.regressionnet.apply(init_box_regression_params) 
+  
+    in_channels = object_classification_cfg[0][1]
+    self.objectclassificationnet = ObjectClassificationNet680(in_channels) 
+  
 
     print('===> Basenet out config:', self.out_basenet_config)
     print('===> Classnet intermediate out config:', self.out_intermediate_config)
     print('===> Regressionnet out config:', self.out_regressionnet_config)
     
 
-  def forward(self, x):
-    self.out_basenet = self.basenet(x)['out']
-    self.out_classnet = self.classnet(self.out_basenet)
+  def forward(self, x, gt_theta =None):
+    self.out_basenet = self.basenet(x)
+    self.out_classnet = self.classnet(self.out_basenet['out'])
     self.out_regressionnet = self.regressionnet(self.out_classnet['intermediate'])     
+    
+    # Apply spatial transformer to conv4 (output) of basenet 
+    # Output of the object classification net is computed in main function since it depends 
+    # on the output of predicted theta  
+
+    print('Testing spt..')
+    # Test 
+    batch_size = x.size(0) 
+    isobject_outputs = self.out_classnet['out'].view(batch_size, -1) # N x 36 
+    _, pos_box_index = torch.max(isobject_outputs, dim=1, keepdim=True)
+    permuted_reg_outputs = self.out_regressionnet['out'].permute(2,0,1)
+    batch_indices = torch.LongTensor((range(batch_size))) 
+    
+    if x.is_cuda :
+      batch_indices = batch_indices.cuda()   
+    pred_boxes = permuted_reg_outputs[pos_box_index.data.view(-1), batch_indices, :]
+    pred_theta = box_proposal_to_theta(pred_boxes) 
+     
+    print('\n====> Using Ground truth of theta.....') 
+    
+    # TODO: use gt theta instead of predicted one to separate debugging 
+    if gt_theta is not None:
+      pred_theta = gt_theta 
+
+    # Transform features from conv4 
+    self.out_conv4 = self.out_basenet['out'] # N x 256 x 6 x 6 
+    tf_out_conv4 = torch_spatial_transformer(self.out_conv4, pred_theta, (4, 4)) # 4 because 48/32 = 1.5 so 6 -> 4  ? 
+    # Log softmax of object classification 
+    self.out_log_softmax =  self.objectclassificationnet(tf_out_conv4.view(batch_size, -1))['out'] 
+
+    
+
+ 
     return {'cls':self.out_classnet, 
-            'reg':self.out_regressionnet} 
+            'reg':self.out_regressionnet,
+            'base':self.out_basenet,
+            'theta':pred_theta, 
+            'object':self.out_log_softmax} 
 
 def test_separate():
   basenet = BaseNet680()
@@ -266,7 +348,7 @@ def test_faster_rcnn_net():
   print('class proposal out size:', out['cls']['out'].size())
   print('intermediate size:', out['cls']['intermediate'].size())
   print('Reg out size:', out['reg']['out'].size())
-  
+  print('Basenet output size (conv4):', out['base']['out'].size())
 if __name__=="__main__":
   test_faster_rcnn_net() 
   #test() 
