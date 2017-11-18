@@ -25,11 +25,11 @@ class res_block_3(nn.Module):
     self.brach_3 = nn.Sequential(nn.Conv2d(in_channels, planes, kernel_size=3, stride=1, padding=1, bias=False), 
                     nn.BatchNorm2d(planes), 
                     nn.ReLU(inplace=True),
-                    nn.Conv2d(planes, planes, kernel_size=1, stride=1, padding=1,bias=False),  
+                    nn.Conv2d(planes, planes, kernel_size=3, stride=1, padding=1,bias=False),  
                     nn.BatchNorm2d(planes)      
                 ) 
     self.shortcut = nn.Sequential(
-                    nn.Conv2d(in_channels, planes, kernel_size=1, stride=1, padding=1, bias=False), 
+                    nn.Conv2d(in_channels, planes, kernel_size=1, stride=1, padding=0, bias=False), 
                     nn.BatchNorm2d(planes)  
                    )
   def forward(self,x):

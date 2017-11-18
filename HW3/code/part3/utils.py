@@ -191,7 +191,7 @@ def batch_display_transformed(inputs, tf_gt_inputs, tf_pred_inputs=None, num_el=
   
   
   plt.subplot(num_rows, 1, 2)
-  plt.imshow(gt_grid.numpy().transpose((1,2,0)).astype(np.uint8))
+  plt.imshow(gt_grid.cpu().numpy().transpose((1,2,0)).astype(np.uint8))
   plt.title('Ground Truth Transformed Images')
   plt.axis('off') 
   

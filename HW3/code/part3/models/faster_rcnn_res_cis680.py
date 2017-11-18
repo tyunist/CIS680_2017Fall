@@ -1,4 +1,4 @@
-# Faster RCNN with convnet as the base net 
+# Faster RCNN with Res net as the base net 
 import pdb 
 import torch
 import torch.nn as nn 
@@ -171,22 +171,51 @@ class ClassProposalNet680(nn.Module):
             'conv2':self.out_conv2, 
             'out': self.out_conv2} 
     
+class res_block_3(nn.Module):
+  """Residual block with kernel of size 3x3"""
+  def __init__(self, input_channels, output_channels, out_config=None):
+    super(res_block_3,self).__init__()
+    n_in, j_in, r_in, start_in = out_config
+    self.brach_3 = nn.Sequential(nn.Conv2d(input_channels, output_channels, kernel_size=3, stride=1, padding=1, bias=False), 
+                    nn.BatchNorm2d(output_channels), 
+                    nn.ReLU(inplace=True),
+                    nn.Conv2d(output_channels, output_channels, kernel_size=3, stride=1, padding=1,bias=False),  
+                    nn.BatchNorm2d(output_channels)      
+                ) 
+
+    self.shortcut = nn.Sequential(
+                    nn.Conv2d(input_channels, output_channels, kernel_size=1, stride=1, padding=0, bias=False), 
+                    nn.BatchNorm2d(output_channels)  
+                   )
+    n_in, j_in, r_in, start_in = get_rep_field(n_in, j_in, r_in, start_in, kernel_size=3, stride=1, padding=1)
+    print('==>Res block conv1', n_in, j_in, r_in, start_in )
+    n_in, j_in, r_in, start_in = get_rep_field(n_in, j_in, r_in, start_in, kernel_size=3, stride=1, padding=1)
+    print('==>Res block conv2', n_in, j_in, r_in, start_in )
+    self.out_config = (n_in, j_in, r_in, start_in) 
+
+  def forward(self,x):
+    main = self.brach_3(x) 
+    shortcut = self.shortcut(x) 
+    out = main + shortcut 
+    out = F.relu(out)
+    return out 
+
 
 class BaseNet680(nn.Module):
   def __init__(self, input_channels=3, img_size=48):
     super(BaseNet680,self).__init__() 
     n_in, j_in, r_in, start_in = img_size, 1, 1, 0.5 
-  
+    out_config =  (n_in, j_in, r_in, start_in)
     # Conv1, bn1 and pool1 
     c1_cfg = basenet_cfg[0]
     c1_padding = (int(c1_cfg[0]/2), int(c1_cfg[1]/2))
     c1_kernel = (c1_cfg[0], c1_cfg[1]) 
-    self.conv1 = nn.Conv2d(input_channels,c1_cfg[2],kernel_size=c1_kernel, stride=1, padding=c1_padding, bias=False) 
+    self.conv1 = res_block_3(input_channels,c1_cfg[2], out_config=out_config) 
     n_in, j_in, r_in, start_in = get_rep_field(n_in, j_in, r_in, start_in, kernel_size=c1_kernel[0], stride=1, padding=c1_padding[0])
+    out_config =  (n_in, j_in, r_in, start_in)
     print('==>conv1', n_in, j_in, r_in, start_in )
     input_channels = c1_cfg[2] 
     
-    self.bn1 = nn.BatchNorm2d(input_channels)
     
     p1_cfg = basenet_cfg[1]
     self.pool1 = nn.MaxPool2d(kernel_size=p1_cfg[1], stride=p1_cfg[2], padding=p1_cfg[3])    
@@ -197,12 +226,13 @@ class BaseNet680(nn.Module):
     c2_cfg = basenet_cfg[2]
     c2_padding = (int(c2_cfg[0]/2), int(c2_cfg[1]/2)) 
     c2_kernel = (c2_cfg[0], c2_cfg[1]) 
-    self.conv2 = nn.Conv2d(input_channels,c2_cfg[2],kernel_size=c2_kernel, stride=1, padding=c2_padding, bias=False) 
-    n_in, j_in, r_in, start_in = get_rep_field(n_in, j_in, r_in, start_in, kernel_size=c2_kernel[1], stride=1, padding=c2_padding[0])
+
+    self.conv2 = res_block_3(input_channels,c2_cfg[2], out_config=out_config) 
+    n_in, j_in, r_in, start_in = get_rep_field(n_in, j_in, r_in, start_in, kernel_size=c1_kernel[0], stride=1, padding=c1_padding[0])
+    out_config =  (n_in, j_in, r_in, start_in)
     print('==>Conv2', n_in, j_in, r_in, start_in )
     input_channels = c2_cfg[2] 
     
-    self.bn2 = nn.BatchNorm2d(input_channels)
     
     p2_cfg = basenet_cfg[3]
     self.pool2 = nn.MaxPool2d(kernel_size=p2_cfg[1], stride=p2_cfg[2], padding=p2_cfg[3])    
@@ -212,12 +242,13 @@ class BaseNet680(nn.Module):
     c3_cfg = basenet_cfg[4]
     c3_padding = (int(c3_cfg[0]/2), int(c3_cfg[1]/2))
     c3_kernel = (c3_cfg[0], c3_cfg[1]) 
-    self.conv3 = nn.Conv2d(input_channels,c3_cfg[2],kernel_size=c3_kernel, stride=1, padding=c3_padding, bias=False) 
-    n_in, j_in, r_in, start_in = get_rep_field(n_in, j_in, r_in, start_in, kernel_size=c3_kernel[1], stride=1, padding=c3_padding[0])
+
+    self.conv3 = res_block_3(input_channels,c3_cfg[2], out_config=out_config) 
+    n_in, j_in, r_in, start_in = get_rep_field(n_in, j_in, r_in, start_in, kernel_size=c1_kernel[0], stride=1, padding=c1_padding[0])
+    out_config =  (n_in, j_in, r_in, start_in)
     print('==>Conv3', n_in, j_in, r_in, start_in )    
     input_channels = c3_cfg[2] 
     
-    self.bn3 = nn.BatchNorm2d(input_channels)
     
     p3_cfg = basenet_cfg[5]
     self.pool3 = nn.MaxPool2d(kernel_size=p3_cfg[1], stride=p3_cfg[2], padding=p3_cfg[3])
@@ -235,11 +266,11 @@ class BaseNet680(nn.Module):
     self.out_config =  (n_in, j_in, r_in, start_in) 
 
   def forward(self, x):
-    self.out_conv1 = F.relu(self.bn1(self.conv1(x)))
+    self.out_conv1 = self.conv1(x)
     self.out_pool1 = self.pool1(self.out_conv1)
-    self.out_conv2 = F.relu(self.bn2(self.conv2(self.out_pool1))) 
+    self.out_conv2 = self.conv2(self.out_pool1)
     self.out_pool2 = self.pool2(self.out_conv2)
-    self.out_conv3 = F.relu(self.bn3(self.conv3(self.out_pool2))) 
+    self.out_conv3 = self.conv3(self.out_pool2)
     self.out_pool3 = self.pool3(self.out_conv3)
     self.out_conv4 = F.relu(self.bn4(self.conv4(self.out_pool3))) 
     return {'conv1': self.out_conv1, 
@@ -247,9 +278,9 @@ class BaseNet680(nn.Module):
             'conv3': self.out_conv3, 
             'out': self.out_conv4  
            }
-class Faster_RCNN_net680(nn.Module):
+class Faster_RCNN_res_net680(nn.Module):
   def __init__(self, in_channels=3):
-    super(Faster_RCNN_net680, self).__init__() 
+    super(Faster_RCNN_res_net680, self).__init__() 
     
     self.basenet = BaseNet680(in_channels)
     self.out_basenet_config = self.basenet.out_config 
@@ -333,7 +364,7 @@ def test_separate():
   print('out class size:', out['out'].size())
 
 def test_faster_rcnn_net():
-  fasterrcnnnet = Faster_RCNN_net680()
+  fasterrcnnnet = Faster_RCNN_res_net680()
   # Initialize params for fasterrcnnnet 
   print('\n===> Initializing params for fasterrcnnnet...') 
   init_fasterrcnn_params(fasterrcnnnet)

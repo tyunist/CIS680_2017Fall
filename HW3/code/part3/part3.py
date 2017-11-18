@@ -26,14 +26,14 @@ parser.add_argument('--min_lr', default=1e-4, type=float, help='Min of learning 
 parser.add_argument('--max_epoches', default=20, type=int, help='Max number of epoches')
 parser.add_argument('--GPU', default=1, type=int, help='GPU core')
 parser.add_argument('--use_GPU', default='true', type=str2bool, help='Use GPU or not')
-parser.add_argument('--model', default='/home/tynguyen/cis680/logs/HW3/part3/3.2/simple_loss_100_1_use_pred', type=str, help='Model path')
+parser.add_argument('--model', default='/home/tynguyen/cis680/logs/HW3/part3/3.2/simple_loss_res_net', type=str, help='Model path')
  
 parser.add_argument('--data_path', default='/home/tynguyen/cis680/data/cifar10_transformed', type=str, help='Data path')
 parser.add_argument('--resume', default='false', type=str2bool, help='resume from checkpoint')
 parser.add_argument('--visual', default='false', type=str2bool, help='Display images')
 parser.add_argument('--optim', default='adam', type=str, help='Type of optimizer', choices=['adam', 'sgd'])
-parser.add_argument('--net', default='fasterrcnnnet', type=str, help='Type of nets', choices=['convnet', 'mobilenet', 'resnet', 'fasterrcnnnet'])
-parser.add_argument('--loss_type', default='total', type=str, help='Type of loss functions', choices=['total','cls', 'reg', 'object', 'proposal', 'simple'])
+parser.add_argument('--net', default='fasterrcnnnet', type=str, help='Type of nets', choices=['convnet', 'mobilenet', 'resnet', 'fasterrcnnnet', 'fasterrcnnmobilenet', 'fasterrcnnresnet'])
+parser.add_argument('--loss_type', default='simple', type=str, help='Type of loss functions', choices=['total','cls', 'reg', 'object', 'proposal', 'simple'])
 parser.add_argument('--init_method', default='truncated_normal', type=str, help='Type of initialization functions', choices=['xavier','truncated_normal', 'v2_truncated_normal'])
 
 
@@ -100,6 +100,7 @@ if args.resume:
   start_epoch = checkpoint['epoch'] 
   #args.lr = 1e-4 #TODO: decrease LR ? 
 else:
+    init_fasterrcnn = False 
     print('==> Building model..')
     # net = VGG('VGG19')
     # net = ResNet18()
@@ -120,8 +121,17 @@ else:
       net = ResNet680() # Part 1.3  
     elif args.net == 'basenet':
       net = BaseNet680()
-    elif args.net == 'fasterrcnnnet':
+    elif args.net == 'fasterrcnnnet': # part 2, 3.1 
       net = Faster_RCNN_net680()
+      init_fasterrcnn = True 
+    elif args.net == 'fasterrcnnmobilenet': # part 3.2 
+      net = Faster_RCNN_mobile_net680()
+      init_fasterrcnn = True 
+    elif args.net == 'fasterrcnnresnet': # part 3.2 
+      net = Faster_RCNN_res_net680()
+      init_fasterrcnn = True     
+
+    if init_fasterrcnn:
       # Initialize net 
       print('\n====================================================')
       print('===> Initializing parameters for net') 
@@ -238,7 +248,7 @@ def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None
     gt_theta = box_proposal_to_theta(boxes)
     # During training, use gt_theta. Testing use the predicted theta
     if is_train: 
-      total_outputs = net(inputs) # , gt_theta) # TODO: delete gt_theta to use predicted theta instead  
+      total_outputs = net(inputs , gt_theta)  
     else:
       total_outputs = net(inputs) 
     isobject_outputs =  total_outputs['cls']['out'].view(batch_size, -1) # output: (N x 36)
@@ -293,13 +303,11 @@ def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None
       # total_loss = 10*reg_loss + class_loss 
       total_loss = 100*reg_loss + class_loss 
     elif use_loss_type == 'simple':
-      # total_loss = 10*reg_loss + class_loss + 0.5*object_loss  # multiply 10 to make regression run faster
-      # total_loss = 20*reg_loss + class_loss + 1*object_loss  # multiply 10 to make regression run faster
       total_loss = 100*reg_loss + class_loss + 1*object_loss  # multiply 10 to make regression run faster
     
     
     else:
-      total_loss = 10*reg_loss + class_loss + 0.1*object_loss  # multiply 10 to make regression run faster
+      total_loss = 100*reg_loss + class_loss + 1*object_loss   
     if is_train:
       total_loss.backward() # Computer gradients 
       optimizer.step()  # Update network's parameters 
