@@ -185,7 +185,7 @@ def batch_display_transformed(inputs, tf_gt_inputs, tf_pred_inputs=None, num_el=
   
   plt.figure(figsize=(2*num_el, 3 * num_rows)) 
   plt.subplot(num_rows, 1, 1)
-  plt.imshow(orig_grid.numpy().transpose((1,2,0)).astype(np.uint8))
+  plt.imshow(orig_grid.cpu().numpy().transpose((1,2,0)).astype(np.uint8))
   plt.title('Original Images')
   plt.axis('off') 
   
@@ -197,7 +197,7 @@ def batch_display_transformed(inputs, tf_gt_inputs, tf_pred_inputs=None, num_el=
   
   if tf_pred_inputs is not None:
     plt.subplot(num_rows, 1, 3)
-    plt.imshow(pred_grid.numpy().transpose((1,2,0)).astype(np.uint8))
+    plt.imshow(pred_grid.cpu().numpy().transpose((1,2,0)).astype(np.uint8))
     plt.title('Predicted Transformed Images')
     plt.axis('off') 
 

@@ -20,12 +20,14 @@ def str2bool(v):
   return v.lower() in ('true', '1') 
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10 Training')
+parser.add_argument('--part', default='3', type=str, help='part which you want to run (2/3)', choices=['2', '3'])
 parser.add_argument('--lr', default=1e-3, type=float, help='learning rate')
 parser.add_argument('--min_lr', default=1e-4, type=float, help='Min of learning rate')
 parser.add_argument('--max_epoches', default=20, type=int, help='Max number of epoches')
 parser.add_argument('--GPU', default=1, type=int, help='GPU core')
 parser.add_argument('--use_GPU', default='true', type=str2bool, help='Use GPU or not')
-parser.add_argument('--model', default='/home/tynguyen/cis680/logs/HW3/part3/3.2/simple_loss', type=str, help='Model path')
+parser.add_argument('--model', default='/home/tynguyen/cis680/logs/HW3/part3/3.2/simple_loss_100_1_use_pred', type=str, help='Model path')
+ 
 parser.add_argument('--data_path', default='/home/tynguyen/cis680/data/cifar10_transformed', type=str, help='Data path')
 parser.add_argument('--resume', default='false', type=str2bool, help='resume from checkpoint')
 parser.add_argument('--visual', default='false', type=str2bool, help='Display images')
@@ -236,7 +238,7 @@ def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None
     gt_theta = box_proposal_to_theta(boxes)
     # During training, use gt_theta. Testing use the predicted theta
     if is_train: 
-      total_outputs = net(inputs, gt_theta) # TODO: delete gt_theta to use predicted theta instead  
+      total_outputs = net(inputs) # , gt_theta) # TODO: delete gt_theta to use predicted theta instead  
     else:
       total_outputs = net(inputs) 
     isobject_outputs =  total_outputs['cls']['out'].view(batch_size, -1) # output: (N x 36)
@@ -288,9 +290,13 @@ def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None
     elif use_loss_type == 'object':
       total_loss = object_loss 
     elif use_loss_type == 'proposal':
-      total_loss = 10*reg_loss + class_loss 
+      # total_loss = 10*reg_loss + class_loss 
+      total_loss = 100*reg_loss + class_loss 
     elif use_loss_type == 'simple':
-      total_loss = 10*reg_loss + class_loss + 0.5*object_loss  # multiply 10 to make regression run faster
+      # total_loss = 10*reg_loss + class_loss + 0.5*object_loss  # multiply 10 to make regression run faster
+      # total_loss = 20*reg_loss + class_loss + 1*object_loss  # multiply 10 to make regression run faster
+      total_loss = 100*reg_loss + class_loss + 1*object_loss  # multiply 10 to make regression run faster
+    
     
     else:
       total_loss = 10*reg_loss + class_loss + 0.1*object_loss  # multiply 10 to make regression run faster
@@ -314,7 +320,7 @@ def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None
     pred_theta = total_outputs['theta'] 
     tf_pred_inputs = torch_spatial_transformer(inputs, pred_theta, (32,32)) 
      
-    if visual == True and num_iter == max_iter - 1:
+    if epoch == start_epoch + args.max_epoches-1 and num_iter == max_iter - 1:
       utils.batch_display_transformed(inputs, tf_gt_inputs, tf_pred_inputs, num_el=10)  
       plt.axis('off')
       if not os.path.exists(args.model):
@@ -352,8 +358,9 @@ def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None
     best_acc = acc
 
   # Update learning rate after each epoch 
-  lr_array.append(lr) 
-  lr = adjust_lr(optimizer, lr_decay_f) 
+  if is_train:
+    lr_array.append(lr) 
+    lr = adjust_lr(optimizer, lr_decay_f) 
   return lr, epoch_time, 100.*correct/total, 100.*object_correct/total_object, train_loss/(batch_idx+1), train_class_loss/(batch_idx+1), train_reg_loss/(batch_idx+1), train_object_loss/(batch_idx+1),  best_acc
 
  
@@ -370,13 +377,14 @@ def run():
   for epoch in range(start_epoch, start_epoch+args.max_epoches):
     # Train 
     if epoch > 0:
-      lr, epoch_time, train_acc, train_object_acc, train_loss, train_class_loss, train_reg_loss,train_object_loss,  _ = train(epoch, 100, lr, args.visual)
+      lr, epoch_time, train_acc, train_object_acc, train_loss, train_class_loss, train_reg_loss,train_object_loss,  _ = train(epoch, BATCH_SIZE, lr, args.visual)
       training_time += epoch_time 
     # Test 
-    if epoch == start_epoch + args.max_epoches-1:
-      max_batches = 100
-    else: 
-      max_batches = 10 #100 
+    max_batches = 10
+    if epoch == start_epoch + args.max_epoches-1 or args.use_GPU:
+      max_batches = BATCH_SIZE
+    
+       
     _, _, test_acc, test_object_acc, test_loss, test_class_loss, test_reg_loss, test_object_loss, best_acc = train(epoch, max_batches, is_train=False, best_acc=best_acc)
     
 
@@ -399,45 +407,72 @@ def run():
   test_acc_array = np.array(test_acc_array)  
   np.savetxt(os.path.join(args.model, 'test_accuracy.txt'), test_acc_array) 
 
+  # Number of columns of figures to display 
+  num_cols = 3 
+  if args.part == '2':
+    num_cols = 2
+  fig_num = 1 
+
   # Plot results 
-  plt.figure(figsize=(12,14))
-  plt.subplot(221)
+  plt.figure(figsize=(20,16))
+  plt.subplot(2, num_cols, fig_num)
   plt.plot(train_acc_array[:, 2], color='b') 
   plt.plot(test_acc_array[:, 2], color='r')
   plt.xlabel('x 100 (Iterations)') 
   plt.ylabel('Accuracy') 
-  plt.title('Training vs Testing Accuracy') 
+  plt.title('Training vs Testing Proposal Accuracy') 
   plt.legend(['Train', 'Test'])
-  plt.savefig(os.path.join(args.model, 'accuracy.png'))   
+  plt.savefig(os.path.join(args.model, 'proposal_accuracy.png'))   
+  fig_num += 1 
 
-  plt.subplot(222)
+  plt.subplot(2, num_cols, fig_num)
   plt.plot(train_acc_array[:, 3], color='b') 
   plt.plot(test_acc_array[:, 3], color='r')
   plt.xlabel('x 100 (Iterations)') 
   plt.ylabel('Total Loss') 
-  plt.title('Training vs Testing Total Loss') 
+  plt.title('Training vs Testing Object Classification Accuracy') 
   plt.legend(['Train', 'Test'])
-  plt.savefig(os.path.join(args.model, 'total_loss.png'))   
+  plt.savefig(os.path.join(args.model, 'object_accuracy.png'))   
+  fig_num += 1 
 
-
-  plt.subplot(223)
+  plt.subplot(2, num_cols, fig_num)
   plt.plot(train_acc_array[:, 4], color='b') 
   plt.plot(test_acc_array[:, 4], color='r')
+  plt.xlabel('x 100 (Iterations)') 
+  plt.ylabel('Total Loss') 
+  plt.title('Training vs Testing Total Loss') 
+  plt.legend(['Train', 'Test'])
+  plt.savefig(os.path.join(args.model, 'total_loss.png'))  
+  fig_num += 1 
+
+  plt.subplot(2, num_cols, fig_num)
+  plt.plot(train_acc_array[:, 5], color='b') 
+  plt.plot(test_acc_array[:, 5], color='r')
   plt.xlabel('x 100 (Iterations)') 
   plt.ylabel('Classification Loss') 
   plt.title('Training vs Testing Classification Loss') 
   plt.legend(['Train', 'Test'])
   plt.savefig(os.path.join(args.model, 'class_loss.png'))   
+  fig_num += 1 
 
-  plt.subplot(224)
-  plt.plot(train_acc_array[:, 5], color='b') 
-  plt.plot(test_acc_array[:, 5], color='r')
+  plt.subplot(2, num_cols, fig_num)
+  plt.plot(train_acc_array[:, 6], color='b') 
+  plt.plot(test_acc_array[:, 6], color='r')
   plt.xlabel('x 100 (Iterations)') 
   plt.ylabel('Regression Loss') 
   plt.title('Training vs Testing Regression Loss') 
   plt.legend(['Train', 'Test'])
   plt.savefig(os.path.join(args.model, 'Regression_loss.png'))   
+  fig_num += 1 
 
+  plt.subplot(2, num_cols, fig_num)
+  plt.plot(train_acc_array[:, 7], color='b') 
+  plt.plot(test_acc_array[:, 7], color='r')
+  plt.xlabel('x 100 (Iterations)') 
+  plt.ylabel('Regression Loss') 
+  plt.title('Training vs Testing Object Classification Loss') 
+  plt.legend(['Train', 'Test'])
+  plt.savefig(os.path.join(args.model, 'object_loss.png'))  
   print('=================================================================>')
   print('Finish running', args) 
 
