@@ -280,7 +280,6 @@ class Faster_RCNN_net680(nn.Module):
     # Output of the object classification net is computed in main function since it depends 
     # on the output of predicted theta  
 
-    print('Testing spt..')
     # Test 
     batch_size = x.size(0) 
     isobject_outputs = self.out_classnet['out'].view(batch_size, -1) # N x 36 
@@ -293,11 +292,11 @@ class Faster_RCNN_net680(nn.Module):
     pred_boxes = permuted_reg_outputs[pos_box_index.data.view(-1), batch_indices, :]
     pred_theta = box_proposal_to_theta(pred_boxes) 
      
-    print('\n====> Using Ground truth of theta.....') 
     
     # TODO: use gt theta instead of predicted one to separate debugging 
     if gt_theta is not None:
       pred_theta = gt_theta 
+      print('\n====> Using Ground truth of theta.....') 
 
     # Transform features from conv4 
     self.out_conv4 = self.out_basenet['out'] # N x 256 x 6 x 6 

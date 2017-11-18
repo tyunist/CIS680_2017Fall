@@ -25,13 +25,13 @@ parser.add_argument('--min_lr', default=1e-4, type=float, help='Min of learning 
 parser.add_argument('--max_epoches', default=20, type=int, help='Max number of epoches')
 parser.add_argument('--GPU', default=1, type=int, help='GPU core')
 parser.add_argument('--use_GPU', default='true', type=str2bool, help='Use GPU or not')
-parser.add_argument('--model', default='/home/tynguyen/cis680/logs/HW3/part3/3.13.13.1', type=str, help='Model path')
+parser.add_argument('--model', default='/home/tynguyen/cis680/logs/HW3/part3/3.2/simple_loss', type=str, help='Model path')
 parser.add_argument('--data_path', default='/home/tynguyen/cis680/data/cifar10_transformed', type=str, help='Data path')
 parser.add_argument('--resume', default='false', type=str2bool, help='resume from checkpoint')
 parser.add_argument('--visual', default='false', type=str2bool, help='Display images')
 parser.add_argument('--optim', default='adam', type=str, help='Type of optimizer', choices=['adam', 'sgd'])
 parser.add_argument('--net', default='fasterrcnnnet', type=str, help='Type of nets', choices=['convnet', 'mobilenet', 'resnet', 'fasterrcnnnet'])
-parser.add_argument('--loss_type', default='total', type=str, help='Type of loss functions', choices=['total','cls', 'reg', 'object'])
+parser.add_argument('--loss_type', default='total', type=str, help='Type of loss functions', choices=['total','cls', 'reg', 'object', 'proposal', 'simple'])
 parser.add_argument('--init_method', default='truncated_normal', type=str, help='Type of initialization functions', choices=['xavier','truncated_normal', 'v2_truncated_normal'])
 
 
@@ -86,11 +86,17 @@ if args.resume:
   # Load checkpoint 
   print('==> Resuming from checkpoint..') 
   assert os.path.exists(args.model), 'Error: no checkpoint directory found!'
-  checkpoint =  torch.load(os.path.join(args.model, 'ckpt.t7')) 
+  # Load to run on GPU:
+  if use_cuda:
+    checkpoint =  torch.load(os.path.join(args.model, 'ckpt.t7')) 
+    print('==> Running on GPU')
+  else:
+    checkpoint = torch.load(os.path.join(args.model,'ckpt.t7'), map_location=lambda storage, loc:storage)
+    print('==> Running on CPU') 
   net = checkpoint['net'] 
   best_acc = checkpoint['acc'] 
   start_epoch = checkpoint['epoch'] 
-  args.lr = 1e-4
+  #args.lr = 1e-4 #TODO: decrease LR ? 
 else:
     print('==> Building model..')
     # net = VGG('VGG19')
@@ -228,8 +234,11 @@ def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None
     
     # Obtain ground truth theta which will transform features 
     gt_theta = box_proposal_to_theta(boxes)
-    
-    total_outputs = net(inputs, gt_theta) # TODO: delete gt_theta to use predicted theta instead  
+    # During training, use gt_theta. Testing use the predicted theta
+    if is_train: 
+      total_outputs = net(inputs, gt_theta) # TODO: delete gt_theta to use predicted theta instead  
+    else:
+      total_outputs = net(inputs) 
     isobject_outputs =  total_outputs['cls']['out'].view(batch_size, -1) # output: (N x 36)
     reg_outputs = total_outputs['reg']['out'] # N x 3 x 36
     cov4_outputs = total_outputs['base']['out'] # N x 256 x 6 x 6 
@@ -278,9 +287,13 @@ def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None
       total_loss = reg_loss 
     elif use_loss_type == 'object':
       total_loss = object_loss 
-    else:
-      total_loss = 10*reg_loss + class_loss + object_loss  # multiply 10 to make regression run faster
+    elif use_loss_type == 'proposal':
+      total_loss = 10*reg_loss + class_loss 
+    elif use_loss_type == 'simple':
+      total_loss = 10*reg_loss + class_loss + 0.5*object_loss  # multiply 10 to make regression run faster
     
+    else:
+      total_loss = 10*reg_loss + class_loss + 0.1*object_loss  # multiply 10 to make regression run faster
     if is_train:
       total_loss.backward() # Computer gradients 
       optimizer.step()  # Update network's parameters 
@@ -326,17 +339,17 @@ def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None
   # Save checkpoint.
   if not is_train:
     acc = 100.*correct/total
-    if acc > best_acc:
-        print('Saving..')
-        state = {
-            'net': net, #net.module if use_cuda else net,
-            'acc': acc,
-            'epoch': epoch, 
-        }
-        if not os.path.exists(args.model):
-            os.makedirs(args.model, exist_ok=True) # exist_ok: allows recursive (mkdir -p) 
-        torch.save(state, os.path.join(args.model,'ckpt.t7') )
-        best_acc = acc
+    #if acc > best_acc:
+    print('Saving..')
+    state = {
+        'net': net, #net.module if use_cuda else net,
+        'acc': acc,
+        'epoch': epoch, 
+    }
+    if not os.path.exists(args.model):
+        os.makedirs(args.model, exist_ok=True) # exist_ok: allows recursive (mkdir -p) 
+    torch.save(state, os.path.join(args.model,'ckpt.t7') )
+    best_acc = acc
 
   # Update learning rate after each epoch 
   lr_array.append(lr) 
@@ -360,10 +373,10 @@ def run():
       lr, epoch_time, train_acc, train_object_acc, train_loss, train_class_loss, train_reg_loss,train_object_loss,  _ = train(epoch, 100, lr, args.visual)
       training_time += epoch_time 
     # Test 
-    if epoch == args.max_epoches-1:
+    if epoch == start_epoch + args.max_epoches-1:
       max_batches = 100
     else: 
-      max_batches = 2 #100 
+      max_batches = 10 #100 
     _, _, test_acc, test_object_acc, test_loss, test_class_loss, test_reg_loss, test_object_loss, best_acc = train(epoch, max_batches, is_train=False, best_acc=best_acc)
     
 
