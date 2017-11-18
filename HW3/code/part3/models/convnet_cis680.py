@@ -3,7 +3,7 @@
 import torch 
 import torch.nn as nn 
 import torch.nn.functional as F 
-
+import pdb 
 from torch.autograd import Variable 
 
 cfg = [(5, 5, 32), # Conv1 
@@ -17,6 +17,15 @@ cfg = [(5, 5, 32), # Conv1
        (3, 3, 512),# Conv5 
        ('M',2,2,0),  # MaxPool5
       ]   
+
+def get_rep_field(n_in, j_in, r_in, start_in, kernel_size, stride, padding):
+  n_out = (n_in + 2*padding - kernel_size)/stride + 1 
+  j_out = j_in * stride 
+  r_out = r_in + (kernel_size - 1)*j_in 
+  start_out = start_in + ((kernel_size-1)/2 - padding)*j_in 
+  return n_out, j_out, r_out, start_out 
+
+
 class ConvNet(nn.Module):
   def __init__(self):
     super(ConvNet, self).__init__() 
@@ -36,6 +45,9 @@ class ConvNet(nn.Module):
   def _make_layers(self, cfg):
     layers = [] 
     in_channels = 3 
+    num_conv = 1
+    num_multi = 0  
+    n_in, j_in, r_in, start_in = 32, 1, 1, 0.5 
     for x in cfg:
       if len(x) == 4: # MaxPooling 
         layers += [nn.MaxPool2d(kernel_size=x[1], stride=x[2], padding=x[3])]
@@ -43,7 +55,16 @@ class ConvNet(nn.Module):
         layers += [nn.Conv2d(in_channels, out_channels=x[2], kernel_size=(x[0], x[1]), stride=1, padding=(int(x[0]/2), int(x[1]/2)), bias=False ), 
                  nn.BatchNorm2d(x[2]), 
                  nn.ReLU(inplace=True)]
+        n_out, j_out, r_out, start_out = get_rep_field(n_in, j_in, r_in, start_in, kernel_size=x[0], stride=1, padding=int(x[0]/2)) 
+        
+        mutltis = n_in*n_in* in_channels*x[2]*n_out*n_out
+        print('* conv %d, DK, M, N, DF = %d %d %d %d, compute %d'%(num_conv, n_in,  in_channels, x[2], n_out, mutltis))
+        num_multi +=  n_in*n_in* in_channels*x[2]*n_out*n_out # DK · DK · M · N · DF · DF
+        n_in, j_in, r_in, start_in = n_out, j_out, r_out, start_out
+
         in_channels = x[2]
+        num_conv += 1 
+    print('* Total Multiplications: %d'%num_multi)
     return nn.Sequential(*layers)
 
 

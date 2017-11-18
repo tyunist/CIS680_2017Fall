@@ -12,6 +12,7 @@ import torch.nn as nn
 import torch.nn.init as init
 from torchvision import transforms, utils
 from torch.autograd import Variable 
+import torch.nn.functional as F 
 import torch 
 import matplotlib.pyplot as plt 
 import pdb
@@ -19,6 +20,7 @@ import numpy as np
 from skimage.draw import polygon 
 from skimage.transform import resize 
 classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck') 
+
 
 def v2_get_smooth_L1_loss(delta_t):
   """delta_t : N x 3 x d"""
@@ -145,10 +147,10 @@ def get_reg_loss(reg_outputs, boxes, weights, anchors):
 def draw_rectangle(box, img):
   img_size = img.shape[0] 
   center_y, center_x, w = box[0], box[1], box[2]
-  y_start = max(0, center_y - w/2) 
-  x_start = max(0, center_x - w/2) 
-  y_end = min(img_size, y_start + w)
-  x_end = min(img_size, x_start + w) 
+  y_start = min(max(0, center_y - w/2), img_size-1)
+  x_start = min(max(0, center_x - w/2), img_size-1)
+  y_end = min(img_size-1, y_start + w)
+  x_end = min(img_size-1, x_start + w) 
   start, end = (y_start, x_start), (y_end, x_end) 
   
   rows = np.array([y_start, y_start, y_end, y_end])
@@ -159,12 +161,55 @@ def draw_rectangle(box, img):
   img[rr, cc, 2] = 10 
   return img 
 
+def batch_display_transformed(inputs, tf_gt_inputs, tf_pred_inputs=None, num_el=None):
+  """Display input images before and after transforming using spatial transformer
+    Inputs:  inputs tensor size N x 3 x H x W
+             tf_gt_inputs: ground truth of transformed images, tensor size N x 3 x H x W 
+             tf_pred_inputs: transformed of predicted images, tensor size N x 3 x H x W """
+  # Stack images together
+  batch_size = inputs.size(0) 
+  if num_el == None:
+    num_el = batch_size 
+  num_el = min(batch_size, num_el) 
+  print('===> Displaying %d pairs..'%num_el) 
+  orig_grid = utils.make_grid(inputs.data[:num_el,...], nrow=num_el) # 
+  gt_grid = utils.make_grid(tf_gt_inputs.data[:num_el,...], nrow=num_el) # 
+  
+  if tf_pred_inputs is not None:
+    pred_grid = utils.make_grid(tf_pred_inputs.data[:num_el,...], nrow=num_el) # 
+  
+  # Number of rows in the figure
+  num_rows = 2
+  if tf_pred_inputs is not None:
+    num_rows = 3  
+  
+  plt.figure(figsize=(2*num_el, 3 * num_rows)) 
+  plt.subplot(num_rows, 1, 1)
+  plt.imshow(orig_grid.cpu().numpy().transpose((1,2,0)).astype(np.uint8))
+  plt.title('Original Images')
+  plt.axis('off') 
+  
+  
+  plt.subplot(num_rows, 1, 2)
+  plt.imshow(gt_grid.cpu().numpy().transpose((1,2,0)).astype(np.uint8))
+  plt.title('Ground Truth Transformed Images')
+  plt.axis('off') 
+  
+  if tf_pred_inputs is not None:
+    plt.subplot(num_rows, 1, 3)
+    plt.imshow(pred_grid.cpu().numpy().transpose((1,2,0)).astype(np.uint8))
+    plt.title('Predicted Transformed Images')
+    plt.axis('off') 
+
 def batch_display(sample_batched):
   images_batch, label_batch, box_batch, mask_batch = sample_batched['image'], sample_batched['label'], sample_batched['box'], sample_batched['mask']
   batch_size = len(images_batch) 
       
-  img = images_batch[0].numpy().transpose((1,2,0))
-  rgb = np.fliplr(img.reshape(-1,3)).reshape(img.shape)
+  #img = images_batch[0].numpy().transpose((1,2,0))
+  img = images_batch[0].permute(1,2,0).numpy()
+  # TODO: if image display is not RGB,then swap channels: 
+  #rgb = np.fliplr(img.reshape(-1,3)).reshape(img.shape)
+  rgb = img 
   mask = mask_batch[0].numpy() 
   print('size of mask:', mask.shape) 
   img_size = img.shape[0] 
@@ -175,22 +220,24 @@ def batch_display(sample_batched):
   boxed_img = draw_rectangle(box, rgb.copy()) 
 
   # Draw mask 
-  resized_img = resize(rgb.astype(np.int8), (img_size/8.0, img_size/8.0)) 
+  resized_img = resize(rgb.astype(np.uint8), (img_size/8.0, img_size/8.0)) 
   print('New image size:', resized_img.shape)
   one_mask = np.where(mask==1) 
   zero_mask = np.where(mask==0)
   
+  # Make resize_img white 
+  resized_img = 255*np.ones_like(resized_img).astype(np.uint8) 
   resized_img[one_mask[0], one_mask[1],:] = np.array([100, 100, 20])  
   resized_img[zero_mask[0], zero_mask[1],:] = 0 
   
   plt.subplot(2,2,1)
-  plt.imshow(rgb)
+  plt.imshow(rgb.astype(np.uint8))
   plt.title(classes[label_batch[0].numpy()[0]])  
   plt.subplot(2,2,2)
   plt.imshow(mask,cmap='gray') 
   plt.title('Mask') 
   plt.subplot(2,2,3)
-  plt.imshow(boxed_img) 
+  plt.imshow(boxed_img.astype(np.uint8)) 
   plt.title('Bounding box') 
   plt.subplot(2,2,4)
   plt.imshow(resized_img) 
