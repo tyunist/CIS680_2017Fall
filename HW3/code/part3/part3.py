@@ -26,7 +26,7 @@ parser.add_argument('--min_lr', default=1e-4, type=float, help='Min of learning 
 parser.add_argument('--max_epoches', default=20, type=int, help='Max number of epoches')
 parser.add_argument('--GPU', default=1, type=int, help='GPU core')
 parser.add_argument('--use_GPU', default='true', type=str2bool, help='Use GPU or not')
-parser.add_argument('--model', default='/home/tynguyen/cis680/logs/HW3/part3/3.2/simple_loss_res_net', type=str, help='Model path')
+parser.add_argument('--model', default='/home/tynguyen/cis680/logs/HW3/part3/3.2/simple', type=str, help='Model path')
  
 parser.add_argument('--data_path', default='/home/tynguyen/cis680/data/cifar10_transformed', type=str, help='Data path')
 parser.add_argument('--resume', default='false', type=str2bool, help='resume from checkpoint')
@@ -258,7 +258,7 @@ def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None
     # pdb.set_trace()
     
     # Regression Loss 
-    reg_loss = utils.get_reg_loss(reg_outputs, boxes, one_filter, anchors) # Sum over minibatch 
+    reg_loss = utils.get_reg_loss(reg_outputs, boxes, one_filter, anchors)/batch_size # Average over minibatch 
     #print('==> Net %s | Type Loss: %s | Reg loss %.4f over %d total boxes| '%(args.net, args.loss_type, reg_loss.data[0], one_filter.data.sum()))
     
     
@@ -303,6 +303,7 @@ def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None
       # total_loss = 10*reg_loss + class_loss 
       total_loss = 100*reg_loss + class_loss 
     elif use_loss_type == 'simple':
+      # TODO: default is the following, commented loss 
       total_loss = 100*reg_loss + class_loss + 1*object_loss  # multiply 10 to make regression run faster
     
     
@@ -316,7 +317,7 @@ def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None
     train_reg_loss += reg_loss.data[0] 
     train_object_loss += object_loss.data[0] 
     train_loss += total_loss.data[0]
-    epoch_time = progress_bar(batch_idx, len(trainloader), 'Is train: %d  | Total Loss: %.3f | Class Loss: %.4f |Reg Loss: %.4f | Obj Loss: %.4f |Object Acc: %.3f%% | (%d/%d) |Proposal Acc: %.3f%% | (%d/%d) lr: %.6f'
+    epoch_time = progress_bar(batch_idx, len(trainloader), 'Is train: %d  | Total Loss: %.3f | Class Loss: %.4f |Reg Loss: %.5f | Obj Loss: %.5f |Object Acc: %.3f%% | (%d/%d) |Proposal Acc: %.3f%% | (%d/%d) lr: %.6f'
           % (int(is_train), train_loss/(batch_idx+1), train_class_loss/(batch_idx+1), train_reg_loss/(batch_idx+1), train_object_loss/(batch_idx+1),100.*object_correct/total_object, object_correct, total_object, 100.*correct/total, correct, total,  lr))
     
     # Apply spatial transformer on the image 
