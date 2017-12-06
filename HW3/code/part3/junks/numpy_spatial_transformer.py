@@ -1,4 +1,4 @@
-# Simple version of spatial_transformer.py, work on both channels  
+# Simple version of spatial_transformer.py, work on a single image with multiple channels  
 import numpy as np 
 import cv2 
 import numpy as np 
@@ -149,69 +149,6 @@ def numpy_transformer(img, H, out_size, scale_H = SCALE_H):
         img2 = _transform(np.linalg.inv(H), img, [h,w])
     return img2 
 
-def test_torch_spatial_transformer():
-    img = io.imread('/home/tynguyen/cis680/data/cifar10_transformed/imgs/05975.png')
-    h, w = img.shape[0], img.shape[1]
-    print( '-- h, w:', h, w ) 
-
-
-    # Apply homography transformation 
-
-    H = np.array([[2., 0.3, 5], [0.3, 2., 10.], [0, 0, 1]]).astype(np.float32)
-    img2 = cv2.warpAffine(img, H[:2, :], (w, h))
-    
-    M = np.array([[w/2.0, 0, w/2.0], [0, h/2.0, h/2.0], [0, 0, 1.]]).astype(np.float32)
-
-
-    H_transformed = np.dot(np.dot(np.linalg.inv(M), np.linalg.inv(H)), M)
-   
-    print('H_transformed:', H_transformed)  
-    
-    img_tensor = torch.unsqueeze(torch.from_numpy(img).float(), 0) 
-    img_tensor = img_tensor.permute(0, 3, 1, 2) 
-    affine_tensor = torch.unsqueeze(torch.from_numpy(H_transformed[:2,:]).float(), 0)
-    pdb.set_trace()
-    grid = F.affine_grid(affine_tensor, img_tensor.size())
-    img3 = F.grid_sample(img_tensor, grid).data.numpy()[0].astype(np.uint8)  
-    img3 = img3.transpose(1,2,0)  
-    
-    print ( '-- Reprojection error:', np.mean(np.abs(img3 - img2))) 
-    Reprojection = abs(img3 - img2)
-    # Test on real image 
-    count = 0 
-    amount = 0 
-    #for i in range(48):
-    #  for j in range(48):
-    #    for k in range(2):
-    #      if Reprojection[i, j, k] > 10:
-    #        print(i, j, k, 'value', Reprojection[i, j, k])
-    #        count += 1 
-    #        amount += Reprojection[i, j, k]
-    #print('There is total %d > 10, over total %d, account for %.3f'%( count, 48*48*3,amount*1.0/count) ) 
-    
-    #io.imshow('img3', img3) 
-    try:
-        plt.subplot(221)
-        plt.imshow(img)
-        plt.title('Original image')
-
-        plt.subplot(222)
-        plt.imshow(img2)
-        plt.title('cv2.warpPerspective')
-
-        plt.subplot(223)
-        plt.imshow(img3)
-        plt.title('Transformer')
-
-        plt.subplot(224)
-        plt.imshow(Reprojection)
-        plt.title('Reprojection Error')
-        plt.show()
-    except KeyboardInterrupt:
-        plt.close()
-        exit(1)
-
-
 
 def test_transformer(scale_H = SCALE_H): 
     img = io.imread('/home/tynguyen/cis680/data/cifar10_transformed/imgs/05975.png')
@@ -273,5 +210,5 @@ def test_transformer(scale_H = SCALE_H):
 
 
 if __name__ == "__main__":
-    #test_transformer()
-  test_torch_spatial_transformer()
+    test_transformer()
+ 

@@ -106,10 +106,14 @@ class ObjectClassificationNet680(nn.Module):
     self.bn1 = nn.BatchNorm1d(output_channels)
     self.linear = nn.Linear(output_channels, 10, bias=False) 
     self.LogSoftmax = nn.LogSoftmax() 
+
+
   
   def forward(self, x):
     self.out_full1 = F.relu(self.bn1(self.full1(x))) 
-  
+    # TODO: include or not dropout
+    self.out_full1 = F.dropout(self.out_full1, training=self.training)
+
     self.digits = self.linear(self.out_full1) 
     self.out_log_softmax = self.LogSoftmax(self.digits) 
     

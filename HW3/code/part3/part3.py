@@ -26,7 +26,8 @@ parser.add_argument('--min_lr', default=1e-4, type=float, help='Min of learning 
 parser.add_argument('--max_epoches', default=20, type=int, help='Max number of epoches')
 parser.add_argument('--GPU', default=1, type=int, help='GPU core')
 parser.add_argument('--use_GPU', default='true', type=str2bool, help='Use GPU or not')
-parser.add_argument('--model', default='/home/tynguyen/cis680/logs/HW3/part3/3.2/simple', type=str, help='Model path')
+# parser.add_argument('--model', default='/home/tynguyen/cis680/logs/HW3/part3/3.2/simple_100_10_1', type=str, help='Model path')
+parser.add_argument('--model', default='/home/tynguyen/cis680/logs/HW3/part3/3.2/simple_dropout', type=str, help='Model path')
  
 parser.add_argument('--data_path', default='/home/tynguyen/cis680/data/cifar10_transformed', type=str, help='Data path')
 parser.add_argument('--resume', default='false', type=str2bool, help='resume from checkpoint')
@@ -171,7 +172,7 @@ lr_array = []
 # Find anchors (x_a, y_a, w_a) N x 3 x 36 
 mask_indices = utils.map_mask_2_img_coordinates()  # (2 x 36)
 # TODO: set this value to a proper value
-w_a = 32# I think it should be 40 but TA said it is 32 
+w_a = 32 # I think it should be 40 but TA said it is 32 
 w_a_array = w_a*np.ones(36)
 mask_indices = np.vstack([mask_indices, w_a_array])
  
@@ -304,6 +305,7 @@ def train(epoch, max_iter=None, lr=0, visual=False, is_train=True, best_acc=None
       total_loss = 100*reg_loss + class_loss 
     elif use_loss_type == 'simple':
       # TODO: default is the following, commented loss 
+      # total_loss = 100*reg_loss + class_loss + 1*object_loss  # multiply 10 to make regression run faster
       total_loss = 100*reg_loss + class_loss + 1*object_loss  # multiply 10 to make regression run faster
     
     
