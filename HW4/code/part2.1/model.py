@@ -37,7 +37,7 @@ flags.DEFINE_integer("interval_plot", 100, "The step interval to plot generative
 flags.DEFINE_boolean("debug", False, "True if debug mode")
 flags.DEFINE_boolean("resume", False, "True if resuming the training")
 flags.DEFINE_boolean("fix_sample", True, "True if want to use one fixed sample over time")
-flags.DEFINE_boolean("max_steps", int(2), "Max number of training steps")
+flags.DEFINE_boolean("max_steps", int(20000), "Max number of training steps")
 FLAGS = flags.FLAGS
 
 # Constants 
